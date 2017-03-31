@@ -1,0 +1,8 @@
+%% -*- erlang -*-
+{incl_mods, [
+             ndbepi,
+             ndbepi_app,
+             ndbepi_cluster_mgr,
+             ndbepi_transporter,
+             ndbepi_util
+            ]}.
