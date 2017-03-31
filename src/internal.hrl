@@ -1,11 +1,11 @@
 -ifndef(internal).
 -define(internal, true).
 
--include_lib("baseline/include/baseline.hrl").
-%%nclude_lib("../.rebar3/default/lib/baseline/include/baseline.hrl").
+%%nclude_lib("baseline/include/baseline.hrl").
+-include_lib("../.rebar3/default/lib/baseline/include/baseline.hrl").
 
--include_lib("mgmepi/include/mgmepi.hrl").
-%%nclude_lib("../.rebar3/default/lib/mgmepi/include/mgmepi.hrl").
+%%nclude_lib("mgmepi/include/mgmepi.hrl").
+-include_lib("../.rebar3/default/lib/mgmepi/include/mgmepi.hrl").
 
 %% == define ==
 

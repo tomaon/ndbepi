@@ -4,7 +4,7 @@
   ndbepi,
   [
    {description, "MySQL Cluster Transaction and Scanning API (ndbapi) for Erlang"},
-   {vsn, "0.1.0"},
+   {vsn, "0.1.1"},
    {registered, [ndbepi_sup]},
    {included_applications, [baseline]},
    {applications, [kernel, stdlib, mgmepi]},
