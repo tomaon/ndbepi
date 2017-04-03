@@ -122,7 +122,7 @@ get_childspec(Env, ByteOrder, Nodes, Connections) ->
              checksum_included  = get_value(?CFG_CONNECTION_CHECKSUM, Connections, 0)
             },
           [
-           get_value(?CFG_CONNECTION_HOSTNAME_2, Connections, "localhost"),
+           get_value_as_list(?CFG_CONNECTION_HOSTNAME_2, Connections, "localhost"),
            abs(get_value(?CFG_CONNECTION_SERVER_PORT, Connections, 0)), % < 0, dynamic
            [
             {active, false},
@@ -138,7 +138,7 @@ get_childspec(Env, ByteOrder, Nodes, Connections) ->
           ]
          ],
          [
-          {spawn_opt, get_value(spawn_opt, Env, 3000)}
+          {spawn_opt, get_value(spawn_opt, Env, [])}
          ]
         ]
       },
@@ -166,13 +166,8 @@ get_connection_config(Config, NodeId) ->
 get_node_config(Config, Connections) ->
     hd(mgmepi_config:get_node_config(Config, get_value(?CFG_CONNECTION_NODE_2, Connections, 0))).
 
-get_value(Key, List, Default)
-  when is_list(Default) ->
-    baseline_lists:get_value_as_list(Key, List, Default);
 get_value(Key, List, Default) ->
     baseline_lists:get_value(Key, List, Default).
 
-%% {ok,M} = mgmepi:checkout().
-%% {ok, L} = mgmepi_config:get_config(M).
-%% [ io:format("~p", [E]) || E <- mgmepi_config:debug_node_config(L, 1) ].
-%% mgmepi_config:debug_connection_config(L, 201).
+get_value_as_list(Key, List, Default) ->
+    baseline_lists:get_value_as_list(Key, List, Default).

@@ -92,9 +92,9 @@
 
 -spec pack(signal(), [term()]) -> binary().
 pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
-             no_of_sections=N, signal_data_length=D}=S, Sections) ->
+             signal_data_length=D, sections_length=N}=S, Sections) ->
 
-    {SN, SL} = case 0 < N of false -> {0, []}; true -> sections_to_words(Sections, B) end,
+    {SN, SL} = case N of 0 -> {0, []}; _ -> sections_to_words(Sections, B) end,
     T = S#signal{message_length = 3 + (I + D + N) + C + SN},
 
     L = lists:flatten([
@@ -132,7 +132,7 @@ pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
                                   ?WORD2_SHIFT_VERSION_ID, ?WORD2_MASK_VERSION_ID},
                                  {#signal.trace,
                                   ?WORD2_SHIFT_TRACE, ?WORD2_MASK_TRACE},
-                                 {#signal.no_of_sections,
+                                 {#signal.sections_length,
                                   ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS}
                                 ]),
                        bpack(T, [
@@ -169,8 +169,6 @@ unpack(Binary, #signal{}=S) ->
           bget(W3, ?WORD3_SHIFT_SEND_BLOCK_NO, ?WORD3_MASK_SEND_BLOCK_NO),
       recv_block_no =
           bget(W3, ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO),
-      message_length =
-          bget(W1, ?WORD1_SHIFT_MESSAGE_LENGTH, ?WORD1_MASK_MESSAGE_LENGTH),
       byte_order =
           ByteOrder,
       checksum_included =
@@ -179,6 +177,8 @@ unpack(Binary, #signal{}=S) ->
           bget(W1, ?WORD1_SHIFT_SIGNAL_ID_INCLUDED, ?WORD1_MASK_SIGNAL_ID_INCLUDED),
       compressed =
           bget(W1, ?WORD1_SHIFT_COMPRESSED, ?WORD1_MASK_COMPRESSED),
+      message_length =
+          bget(W1, ?WORD1_SHIFT_MESSAGE_LENGTH, ?WORD1_MASK_MESSAGE_LENGTH),
       fragment_info =
           bget(W1, ?WORD1_SHIFT_FRAGMENT_INFO_1, ?WORD1_MASK_FRAGMENT_INFO_1)
           bor
@@ -189,10 +189,10 @@ unpack(Binary, #signal{}=S) ->
           bget(W2, ?WORD2_SHIFT_VERSION_ID, ?WORD2_MASK_VERSION_ID),
       trace =
           bget(W2, ?WORD2_SHIFT_TRACE, ?WORD2_MASK_TRACE),
-      no_of_sections =
-          bget(W2, ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS),
       signal_data_length =
-          bget(W1, ?WORD1_SHIFT_SIGNAL_DATA_LENGTH, ?WORD1_MASK_SIGNAL_DATA_LENGTH)
+          bget(W1, ?WORD1_SHIFT_SIGNAL_DATA_LENGTH, ?WORD1_MASK_SIGNAL_DATA_LENGTH),
+      sections_length =
+          bget(W2, ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS)
      }.
 
 

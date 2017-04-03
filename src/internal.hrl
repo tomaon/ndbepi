@@ -144,7 +144,8 @@
           signal_data_length = 0 :: non_neg_integer(),
           signal_data = []       :: [integer()],                 % 0 .. 25
           signal_id = 0          :: non_neg_integer(),
-          no_of_sections = 0     :: non_neg_integer()
+          sections_length = 0    :: non_neg_integer(),
+          sections = []          :: [term()]
         }).
 
 %% == type ==
