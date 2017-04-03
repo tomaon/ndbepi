@@ -11,6 +11,14 @@
    {env, [
         % {name, <<"ndbepi">>}
         % {node, 0}
+          {spawn_opt, [                               % TODO
+                     % {priority, normal}
+                       {fullsweep_after, 0}           % 65535
+                     % {min_heap_size, 233}
+                     % {min_bin_vheap_size, _}
+                     % {max_heap_size, _}
+                     % {message_queue_data, off_heap} % on_heap
+                      ]}
          ]},
    {mod, {ndbepi_app, []}},
 

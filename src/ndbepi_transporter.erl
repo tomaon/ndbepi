@@ -13,7 +13,7 @@
 %%
 
 %% -- private --
--export([start_link/1]).
+-export([start_link/2]).
 
 -behaviour(gen_server).
 -export([init/1, terminate/2, code_change/3,
@@ -35,9 +35,9 @@
 
 %% == private ==
 
--spec start_link([term()]) -> {ok, pid()}|{error, _}.
-start_link(Args) ->
-    gen_server:start_link(?MODULE, Args, []).
+-spec start_link([term()], [term()]) -> {ok, pid()}|{error, _}.
+start_link(Args, Options) ->
+    gen_server:start_link(?MODULE, Args, Options).
 
 
 -spec deliver(pid(), binary(), signal()) -> signal().

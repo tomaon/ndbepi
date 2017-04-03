@@ -113,7 +113,6 @@ get_childspec(Env, ByteOrder, Nodes, Connections) ->
         start_link,
         [
          [
-          %% CFG_MGMD_MGMD_HEARTBEAT_INTERVAL?
           get_value(?CFG_DB_API_HEARTBEAT_INTERVAL, Nodes, 1500),
           #signal{ % for 'recv'
              send_node_id       = Remote,
@@ -129,6 +128,7 @@ get_childspec(Env, ByteOrder, Nodes, Connections) ->
             {active, false},
             {buffer, SndBuf + RecBuf},
             {keepalive, true},
+            {linger, {false, 0}},
             {mode, binary},
             {packet, raw},
             {recbuf, RecBuf},
@@ -136,6 +136,9 @@ get_childspec(Env, ByteOrder, Nodes, Connections) ->
            ],
            get_value(timeout, Env, 3000)
           ]
+         ],
+         [
+          {spawn_opt, get_value(spawn_opt, Env, 3000)}
          ]
         ]
       },
