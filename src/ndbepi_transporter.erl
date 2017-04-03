@@ -125,7 +125,7 @@ connected(Pattern, #state{socket=S}=X) ->
         ok ->
             authorized(Pattern, X);
         {error, Reason} ->
-            {stop, Reason, X}
+            {stop, {shutdown, Reason}, X}
     end.
 
 authorized(Pattern, #state{default=D, socket=S}=X) -> % default:'recv' -> 'send'
@@ -136,7 +136,7 @@ authorized(Pattern, #state{default=D, socket=S}=X) -> % default:'recv' -> 'send'
             ok = inet:setopts(S, [{active, true}]),
             {noreply, X#state{regreq = regreq(D)}, 0};
         {error, Reason} ->
-            {stop, Reason, X}
+            {stop, {shutdown, Reason}, X}
     end.
 
 
