@@ -43,8 +43,8 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {stop, enosys, State}.
 
-handle_info(#signal{}=S, #state{}=X) ->
-    received(S, X);
+handle_info(#signal{}=S, State) ->
+    received(S, State);
 handle_info(timeout, Args) ->
     initialized(Args);
 handle_info({'EXIT', _Pid, Reason}, State) ->
@@ -86,8 +86,8 @@ received(#signal{gsn=?GSN_API_REGCONF}, State) ->
     %%
     %% ApiRegConf
     %% - qmgrRef               = 16515073   = {QMGR,1}
-    %% - version               = 460037     = 0x070505   % Version of NDB node
-    %% - apiHeartbeatFrequency = 310 (3100/10)           % 100 =< freq =< UINT_MAX32?
+    %% - version               = 460037     = 0x070505
+    %% - apiHeartbeatFrequency = 150 (1500/10)           % 100 =<, =< UINT_MAX32?
     %% - mysql_version         = 329489     = 0x050711
     %% - minDbVersion          = 460037     = 0x070505
     %% - nodeState : NodeStatePOD
