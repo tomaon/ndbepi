@@ -48,7 +48,7 @@ get_childspecs(Mgmepi) ->
           ]
          ]
        },
-       permanent,
+       temporary,
        5000,
        worker,
        []
@@ -61,7 +61,7 @@ get_childspecs(Mgmepi) ->
          [
          ]
        },
-       transient,
+       temporary,
        5000,
        worker,
        []
@@ -79,7 +79,7 @@ get_childspecs(Mgmepi) ->
           }
          ]
        },
-       transient,
+       temporary,
        5000,
        supervisor,
        []
@@ -142,7 +142,7 @@ get_childspec(Env, ByteOrder, Nodes, Connections) ->
          ]
         ]
       },
-      transient,
+      temporary,
       5000,
       worker,
       []

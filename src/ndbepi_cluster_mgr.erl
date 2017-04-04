@@ -52,12 +52,16 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 %% == internal ==
 
+cleanup(#state{block_mgr=B}=S)
+  when B =/= undefined ->
+    catch true = baseline_ets:delete(B, ?API_CLUSTERMGR),
+    cleanup(S#state{block_mgr = undefined});
 cleanup(_) ->
     baseline:flush().
 
 setup(Args) ->
     false = process_flag(trap_exit, true),
-    {ok, Args, 100}.
+    {ok, Args, 0}.
 
 
 initialized([]) ->
@@ -75,35 +79,47 @@ initialized([]) ->
     end.
 
 
+received(#signal{gsn=?GSN_API_REGCONF}, State) ->
+    %%
+    %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegConf
+    %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGCONF/2
+    %%
+    %% ApiRegConf
+    %% - qmgrRef               = 16515073   = {QMGR,1}
+    %% - version               = 460037     = 0x070505   % Version of NDB node
+    %% - apiHeartbeatFrequency = 310 (3100/10)           % 100 =< freq =< UINT_MAX32?
+    %% - mysql_version         = 329489     = 0x050711
+    %% - minDbVersion          = 460037     = 0x070505
+    %% - nodeState : NodeStatePOD
+    %% - - startLevel          = 3          = SL_STARTED
+    %% - - nodeGroup           = 0
+    %% - - masterNodeId?       = 4294967295 = 0xffffffff
+    %% - - ?                   = 16777217
+    %% - - ?                   = 1379017808
+    %% - - ?                   = 32767
+    %% - - singleUserMode      = 0
+    %% - - singleUserApi       = 4294967295 = 0xffffffff
+    %% - - m_connected_nodes : BitmaskPOD
+    %% - - - data[0]           = 18                      % 0x00000012 : 1,4
+    %% - - - data[1]           = 0
+    %% - - - data[2]           = 134217728               % 0x08000000 : 91
+    %% - - - data[3]           = 0
+    %% - - - data[4]           = 0
+    %% - - - data[5]           = 0
+    %% - - - data[6]           = 512                     % 0x00000200 : 201
+    %% - - - data[7]           = 0
+    {noreply, State};
+received(#signal{gsn=?GSN_API_REGREF}=S, State) ->
+    %%
+    %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegRef
+    %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGREF/1
+    %%
+    Reason = case lists:nth(3, S#signal.signal_data) of % errorCode
+                 1 -> <<"WrongType">>;
+                 2 -> <<"UnsupportedVersion">>;
+                 N -> N
+             end,
+    {stop, Reason, State};
 received(Signal, State) ->
-    ok = error_logger:info_msg("[~p:~p] s=~p~n", [?MODULE, self(), Signal]),
+    ok = error_logger:warning_msg("[~p:~p] s=~p~n", [?MODULE, self(), Signal]),
     {noreply, State}.
-
-%%
-%% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegConf
-%% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGCONF/2
-%%
-%% ApiRegConf
-%% - qmgrRef               = 16515073   = {QMGR,1}
-%% - version               = 460037     = 0x070505   % Version of NDB node
-%% - apiHeartbeatFrequency = 310 (3100/10)           % 100 =< freq =< UINT_MAX32?
-%% - mysql_version         = 329489     = 0x050711
-%% - minDbVersion          = 460037     = 0x070505
-%% - nodeState : NodeStatePOD
-%% - - startLevel          = 3          = SL_STARTED
-%% - - nodeGroup           = 0
-%% - - masterNodeId?       = 4294967295 = 0xffffffff
-%% - - ?                   = 16777217
-%% - - ?                   = 1379017808
-%% - - ?                   = 32767
-%% - - singleUserMode      = 0
-%% - - singleUserApi       = 4294967295 = 0xffffffff
-%% - - m_connected_nodes : BitmaskPOD
-%% - - - data[0]           = 18                      % 0x00000012 : 1,4
-%% - - - data[1]           = 0
-%% - - - data[2]           = 134217728               % 0x08000000 : 91
-%% - - - data[3]           = 0
-%% - - - data[4]           = 0
-%% - - - data[5]           = 0
-%% - - - data[6]           = 512                     % 0x00000200 : 201
-%% - - - data[7]           = 0
