@@ -274,7 +274,7 @@ run(?GSN_TCSEIZEREQ, P, []) ->
 run(?GSN_GET_TABINFOREQ, P, []) -> % check: ndb_show_tables (Event,Trigger,other?)
     %%
     %% @see
-    %%   ~/include/kernel/singaldata/GetTabInfo.hpp GetTabInfo(Conf|Ref|Req)
+    %%   ~/include/kernel/signaldata/GetTabInfo.hpp GetTabInfo(Conf|Ref|Req)
     %%   ~/src/ndbapi/NdbDictionaryImpl.cpp: NdbDictInterface::getTable/2
     %%   ~/src/ndbapi/NdbDictionaryImpl.cpp: NdbDictInterface::execGET_TABINFO_CONF/2
     %%   ~/src/ndbapi/NdbDictionaryImpl.cpp: NdbDictInterface::execGET_TABINFO_REF/2
@@ -296,8 +296,8 @@ run(?GSN_GET_TABINFOREQ, P, []) -> % check: ndb_show_tables (Event,Trigger,other
                     signal_data = [
                                    0,                    % senderData
                                    numberToRef(?N,201),  % senderRef
-                                   1+2,                  % requestType
-                                   byte_size(Name)+1,    % tableNameLen
+                                   1+2,                  % requestType (1=RequestByName,2=LongSignalConf)
+                                   byte_size(Name)+1,    % tableNameLen (NULL terminated)
                                    0                     % schemaTransId
                                   ]
                     %% -- ById --
@@ -305,7 +305,7 @@ run(?GSN_GET_TABINFOREQ, P, []) -> % check: ndb_show_tables (Event,Trigger,other
                     %% signal_data = [
                     %%                0,                    % senderData
                     %%                numberToRef(?N,201),  % senderRef
-                    %%                0+2,                  % requestType
+                    %%                0+2,                  % requestType (0=RequestById)
                     %%                Id,                   % tableId
                     %%                0                     % schemaTransId
                     %%               ]

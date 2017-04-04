@@ -10,7 +10,7 @@
 %% == define ==
 
 %%
-%% http://dev.mysql.com/doc/ndbapi/en/ndb-internals-ndb-protocol-overview.html
+%% https://dev.mysql.com/doc/ndb-internals/en/ndb-internals-ndb-protocol-messages.html
 %%
 %% NDB message = signal
 %%  1) request : REQ
@@ -29,14 +29,14 @@
 
 %% -- ~/include/kernel/BlockNumbers.h --
 
-%%efine(BACKUP,  16#00f4). % 243: online backups and checkpoints
+%%efine(BACKUP,  16#00f4). % 243: online BACKUPs and checkpoints
 %%efine(DBTC,    16#00f5). % 245: Transaction Coordinator
 %%efine(DBDIH,   16#00f6). % 246: DIstribution Handler, local and global checkpoints
 %%efine(DBLQH,   16#00f7). % 247: Local Query Handler, coordinator of 2-phase commits
-%%efine(DBACC,   16#00f8). % 248: ACCess control and lock management module
+%%efine(DBACC,   16#00f8). % 248: ACCess control and lock management
 %%efine(DBTUP,   16#00f9). % 249: TUPle manager, physical storage
 %%efine(DBDICT,  16#00fa). % 250: data DICTionary
-%%efine(CNTR,    16#00fb). % 251: restart CoordiNaToR, initialisation and configuration
+%%efine(DBCNTR,  16#00fb). % 251: startup CoordiNaToR, initialisation and configuration
 -define(QMGR,    16#00fc). % 252: Queue ManaGeR
 %%efine(NDBFS,   16#00fd). % 253: NDB File System abstraction layer
 %%efine(CMVMI,   16#00fe). % 254: Cluster Manager Virtual Machine Interface
@@ -48,10 +48,10 @@
 %%efine(LGMAN,   16#0104). % 260: Log Group MANager, undo logs
 %%efine(PGMAN,   16#0105). % 261: PaGe and buffer MANagement services
 %%efine(RESTORE, 16#0106). % 262: restoration from online backups
-%%efine(DBINFO,  16#0107). % 263: ?
+%%efine(DBINFO,  16#0107). % 263: ?, ndbinfo
 %%efine(DBSPJ,   16#0108). % 264: ?, multiple cursors, pushed-down joins
-%%efine(THRMAN,  16#0109). % 265: ?
-%%efine(TRPMAN,  16#010a). % 266: ?
+%%efine(THRMAN,  16#0109). % 265: THRead MANagement
+%%efine(TRPMAN,  16#010a). % 266: signal TRansPort MANagement
 
 %%efine(MIN_BLOCK_NO,     ?BACKUP).
 %%efine(MAX_BLOCK_NO,     ?TRPMAN).
