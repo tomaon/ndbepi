@@ -122,6 +122,8 @@
 
 -define(WORD(N), ((N) * 4)).
 
+-define(MAX_API_BLOCK_NO, 16#ffff).
+
 %% == record ==
 
 -record(signal,

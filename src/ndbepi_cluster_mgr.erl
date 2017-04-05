@@ -15,9 +15,9 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2]).
 
-%% -- private --
+%% -- internal --
 -record(state, {
-          block_mgr :: pid()
+          block_mgr :: undefined|pid()
          }).
 
 %% == public ==
@@ -52,10 +52,10 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 %% == internal ==
 
-cleanup(#state{block_mgr=B}=S)
-  when B =/= undefined ->
-    catch true = baseline_ets:delete(B, ?API_CLUSTERMGR),
-    cleanup(S#state{block_mgr = undefined});
+cleanup(#state{block_mgr=M}=X)
+  when M =/= undefined ->
+    catch true = baseline_ets:delete(M, ?API_CLUSTERMGR),
+    cleanup(X#state{block_mgr = undefined});
 cleanup(_) ->
     baseline:flush().
 

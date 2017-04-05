@@ -83,6 +83,37 @@ get_childspecs(Mgmepi) ->
        5000,
        worker,
        []
+     },
+     {
+       ndbepi_connections,
+       {
+         supervisor,
+         start_link,
+         [
+          baseline_app,
+          {
+            {simple_one_for_one, 1, 5},
+            [
+             {
+               undefined,
+               {
+                 ndbepi_connection,
+                 start_link,
+                 []
+               },
+               temporary,
+               5000,
+               worker,
+               []
+             }
+            ]
+          }
+         ]
+       },
+       transient,
+       5000,
+       supervisor,
+       []
      }
     ].
 

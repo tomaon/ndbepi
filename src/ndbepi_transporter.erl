@@ -7,9 +7,9 @@
                       pack/2, unpack/2]).
 
 %%
-%% ~/src/transporter/TCP_Transporter.cpp: TCP_Transporter, ...
+%% ~/src/transporter/TCP_Transporter.cpp: TCP_Transporter::*
 %%
-%% TODO: PACKED, SECTION, TRACE, MAX_(SEND|RECV)_MESSAGE_BYTESIZE,
+%% TODO: PACKED, SECTION, TRACE, MAX_(SEND|RECV)_MESSAGE_BYTESIZE
 %%
 
 %% -- private --
