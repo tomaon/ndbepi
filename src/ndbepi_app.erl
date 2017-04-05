@@ -66,7 +66,7 @@ get_childspecs(Mgmepi) ->
           }
          ]
        },
-       permanent,
+       transient,
        5000,
        supervisor,
        []
