@@ -30,7 +30,7 @@
 %% -- ~/include/kernel/BlockNumbers.h --
 
 %%efine(BACKUP,  16#00f4). % 243: online BACKUPs and checkpoints
-%%efine(DBTC,    16#00f5). % 245: Transaction Coordinator
+-define(DBTC,    16#00f5). % 245: Transaction Coordinator
 %%efine(DBDIH,   16#00f6). % 246: DIstribution Handler, local and global checkpoints
 %%efine(DBLQH,   16#00f7). % 247: Local Query Handler, coordinator of 2-phase commits
 %%efine(DBACC,   16#00f8). % 248: ACCess control and lock management
@@ -92,9 +92,9 @@
 %%efine(GSN_TCRELEASECONF,                 34).
 %%efine(GSN_TCRELEASEREF,                  35).
 %%efine(GSN_TCRELEASEREQ,                  36).
-%%efine(GSN_TCSEIZECONF,                   37).
-%%efine(GSN_TCSEIZEREF,                    38).
-%%efine(GSN_TCSEIZEREQ,                    39).
+-define(GSN_TCSEIZECONF,                   37).
+-define(GSN_TCSEIZEREF,                    38).
+-define(GSN_TCSEIZEREQ,                    39).
 %%efine(GSN_ALLOC_NODEID_CONF,             61).
 %%efine(GSN_ALLOC_NODEID_REF,              62).
 %%efine(GSN_ALLOC_NODEID_REQ,              60).

@@ -19,6 +19,8 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2]).
 
+-export([default/2]).
+-export([call/4, cast/3]).
 -export([deliver/3]).
 
 %% -- internal --
@@ -40,6 +42,36 @@ start_link(Args, Options) ->
     gen_server:start_link(?MODULE, Args, Options).
 
 
+-spec default(pid(), timeout()) -> signal().
+default(Pid, Timeout) ->
+    gen_server:call(Pid, default, Timeout).
+
+
+-spec call(pid(), signal(), [term()], timeout()) -> {ok, signal()}|{error, _}.
+call(Pid, Signal, Sections, Timeout) ->
+    case monitor(process, Pid) of
+        MonitorRef ->
+            ok = cast(Pid, Signal, Sections),
+            try
+                receive
+                    #signal{}=S ->
+                        {ok, S};
+                    {'DOWN', _, _, _, Reason} ->
+                        {error, Reason}
+                after
+                    Timeout ->
+                        {error, timeout}
+                end
+            after
+                true = demonitor(MonitorRef)
+            end
+    end.
+
+-spec cast(pid(), signal(), [term()]) -> ok.
+cast(Pid, Signal, Sections) ->
+    gen_server:cast(Pid, {send, pack(Signal, Sections)}).
+
+
 -spec deliver(pid(), binary(), signal()) -> signal().
 deliver(Pid, Binary, #signal{byte_order=B, signal_id_included=0}=S) ->
     Pid ! S#signal{signal_data = binary_to_words(Binary, B)};
@@ -58,11 +90,11 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-handle_call(_Request, _From, State) ->
-    {stop, enosys, State}.
+handle_call(default, _From, #state{default=D}=X) ->
+    {reply, default(D), X}.
 
-handle_cast(_Request, State) ->
-    {stop, enosys, State}.
+handle_cast({send, Packet}, State) ->
+    ready(Packet, State).
 
 handle_info({tcp, S, Data}, #state{socket=S}=X) ->
     R = X#state.rest,
@@ -119,9 +151,10 @@ connected(Pattern, #state{socket=S}=X) ->
     %% ~/src/common/transporter/TransporterRegistry.cpp: TransporterRegistry::start_service/1
     %% ~/src/common/util/SocketAuthenticator.cpp: SocketAuthSimple::client_authenticate/1
     %%
-    case call(S, Pattern,
+    case call(S,
               <<"ndbd", ?LS, "ndbd passwd", ?LS>>,
-              <<"ok">>) of
+              <<"ok">>,
+              Pattern, 3000) of
         ok ->
             authorized(Pattern, X);
         {error, Reason} ->
@@ -129,12 +162,13 @@ connected(Pattern, #state{socket=S}=X) ->
     end.
 
 authorized(Pattern, #state{default=D, socket=S}=X) -> % default:'recv' -> 'send'
-    case call(S, Pattern,
+    case call(S,
               <<(integer_to_binary(D#signal.recv_node_id))/binary, " ", ?TCP_TRANSPORTER, ?LS>>,
-              <<(integer_to_binary(D#signal.send_node_id))/binary, " ", ?TCP_TRANSPORTER>>) of
+              <<(integer_to_binary(D#signal.send_node_id))/binary, " ", ?TCP_TRANSPORTER>>,
+              Pattern, 3000) of
         ok ->
             ok = inet:setopts(S, [{active, true}]),
-            {noreply, X#state{regreq = regreq(D)}, 0};
+            {noreply, X#state{regreq = regreq(default(D))}, 0};
         {error, Reason} ->
             {stop, Reason, X}
     end.
@@ -182,10 +216,19 @@ checked(Binary, #signal{recv_block_no=B}=S, #state{tab=T, rest=R}=X) ->
     end.
 
 
-call(Socket, Pattern, Req, Cnf) ->
+ready(Packet, #state{socket=S}=X) ->
+    case gen_tcp:send(S, Packet) of
+        ok ->
+            {noreply, X};
+        {error, Reason} ->
+            {stop, Reason, X}
+    end.
+
+
+call(Socket, Req, Cnf, Pattern, Timeout) ->
     case gen_tcp:send(Socket, Req) of
         ok ->
-            case gen_tcp:recv(Socket, 0, timer:seconds(30)) of
+            case gen_tcp:recv(Socket, 0, Timeout) of
                 {ok, Binary} ->
                     check(Binary, Pattern, Cnf);
                 {error, Reason} ->
@@ -203,24 +246,22 @@ check(Binary, Pattern, Expected) ->
             {error, econnreset}
     end.
 
-regreq(#signal{}=D) -> % default:'recv' -> 'send'
+default(#signal{send_node_id=S, recv_node_id=R}=X) -> % 'recv' -> 'send'
+    X#signal{send_node_id = R, recv_node_id = S}.
+
+regreq(#signal{send_node_id=N}=S) ->
     %%
     %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegReq
     %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGREQ/2
     %%
-    S = D#signal.send_node_id,
-    R = D#signal.recv_node_id,
-    L = [
-         number_to_ref(?API_CLUSTERMGR, R),
-         ?NDB_VERSION_ID,
-         ?MYSQL_VERSION_ID
-        ],
-    pack(D#signal{
+    pack(S#signal{
            gsn = ?GSN_API_REGREQ,
-           send_node_id = R,
            send_block_no = ?API_CLUSTERMGR,
-           recv_node_id = S,
            recv_block_no = ?QMGR,
-           signal_data_length = length(L),
-           signal_data = L
+           signal_data_length = 3,
+           signal_data = [
+                          number_to_ref(?API_CLUSTERMGR, N),
+                          ?NDB_VERSION_ID,
+                          ?MYSQL_VERSION_ID
+                         ]
           }, []).
