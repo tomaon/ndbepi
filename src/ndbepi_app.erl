@@ -17,7 +17,7 @@ start(StartType, []) ->
                                                {sup, [
                                                       {local, ndbepi_sup},
                                                       {
-                                                        {rest_for_one, 10, 10},
+                                                        {rest_for_one, 2, 10},
                                                         get_childspecs(Mgmepi)
                                                       }
                                                      ]}
@@ -48,20 +48,7 @@ get_childspecs(Mgmepi) ->
           ]
          ]
        },
-       temporary,
-       5000,
-       worker,
-       []
-     },
-     {
-       ndbepi_cluster_mgr,
-       {
-         ndbepi_cluster_mgr,
-         start_link,
-         [
-         ]
-       },
-       temporary,
+       permanent,
        5000,
        worker,
        []
@@ -74,14 +61,27 @@ get_childspecs(Mgmepi) ->
          [
           baseline_app,
           {
-            {one_for_one, 10, 10},
+            {one_for_all, 1, 5},
             get_childspecs(Mgmepi, baseline_app:get_all_env())
           }
          ]
        },
-       temporary,
+       permanent,
        5000,
        supervisor,
+       []
+     },
+     {
+       ndbepi_cluster_mgr,
+       {
+         ndbepi_cluster_mgr,
+         start_link,
+         [
+         ]
+       },
+       transient,
+       5000,
+       worker,
        []
      }
     ].
@@ -127,7 +127,6 @@ get_childspec(Env, ByteOrder, Nodes, Connections) ->
            [
             {active, false},
             {buffer, SndBuf + RecBuf},
-            {keepalive, true},
             {linger, {false, 0}},
             {mode, binary},
             {packet, raw},

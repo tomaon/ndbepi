@@ -3,7 +3,7 @@
 -include("internal.hrl").
 
 -import(ndbepi_util, [binary_to_word/3, binary_to_words/2,
-                      checksum/2, find/2, number_to_ref/2,
+                      checksum/2, find/3, number_to_ref/2,
                       pack/2, unpack/2]).
 
 %%
@@ -93,7 +93,7 @@ setup(Args) ->
 
 
 initialized([Interval, Default, Args]) ->
-    case find(ndbepi_block_mgr, 10) of
+    case find(ndbepi_block_mgr, 100, 10) of
         {ok, Pid} ->
             try baseline_ets:tab(Pid) of
                 Tab ->
@@ -178,7 +178,7 @@ checked(Binary, #signal{recv_block_no=B}=S, #state{tab=T, rest=R}=X) ->
             received(R, X#state{rest = <<>>})
     catch
         error:Reason ->
-            {stop, Reason, X}
+            {stop, {Reason, S}, X}
     end.
 
 
@@ -187,7 +187,7 @@ call(Socket, Pattern, Req, Cnf) ->
         ok ->
             case gen_tcp:recv(Socket, 0, timer:seconds(30)) of
                 {ok, Binary} ->
-                    check(Binary, Pattern, [Cnf]);
+                    check(Binary, Pattern, Cnf);
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -195,12 +195,12 @@ call(Socket, Pattern, Req, Cnf) ->
             {error, Reason}
     end.
 
-check(Binary, Pattern, Result) ->
+check(Binary, Pattern, Expected) ->
     case baseline_binary:split(Binary, Pattern) of
-        {Result, <<>>} ->
+        {[Expected], <<>>} ->
             ok;
-        _ ->
-            {error, badarg}
+        {[<<"BYE">>], <<>>} ->
+            {error, econnreset}
     end.
 
 regreq(#signal{}=D) -> % default:'recv' -> 'send'

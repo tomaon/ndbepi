@@ -2,7 +2,7 @@
 
 -include("internal.hrl").
 
--import(ndbepi_util, [find/2]).
+-import(ndbepi_util, [find/3]).
 
 %%
 %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::trp_deliver_signal/2, ...
@@ -65,7 +65,7 @@ setup(Args) ->
 
 
 initialized([]) ->
-    case find(ndbepi_block_mgr, 10) of
+    case find(ndbepi_block_mgr, 100, 10) of
         {ok, Pid} ->
             try baseline_ets:insert(Pid, {?API_CLUSTERMGR, self()}) of
                 true ->
@@ -119,7 +119,7 @@ received(#signal{gsn=?GSN_API_REGREF}=S, State) ->
                  2 -> <<"UnsupportedVersion">>;
                  N -> N
              end,
-    {stop, Reason, State};
+    {stop, {shutdown, Reason}, State};
 received(Signal, State) ->
     ok = error_logger:warning_msg("[~p:~p] s=~p~n", [?MODULE, self(), Signal]),
     {noreply, State}.

@@ -10,7 +10,7 @@
 -export([binary_to_word/3, binary_to_words/2,
          word_to_binary/2, words_to_binary/2]).
 -export([sections_to_words/2]).
--export([find/2]).
+-export([find/3]).
 
 %% -- internal --
 
@@ -251,14 +251,14 @@ sections_to_words(Sections, ByteOrder) ->
     sections_to_words(Sections, ByteOrder, 0, [], []).
 
 
--spec find(id(), pos_integer()) -> {ok, pid()}|{error, _}.
-find(_Id, 0) ->
+-spec find(id(), timeout(), pos_integer()) -> {ok, pid()}|{error, _}.
+find(_Id, _Timeout, 0) ->
     {error, not_found};
-find(Id, Retry) ->
+find(Id, Timeout, Retry) ->
     case baseline_app:find(ndbepi_sup, Id) of
         undefined ->
-            ok = timer:sleep(300),
-            find(Id, Retry - 1);
+            ok = timer:sleep(Timeout),
+            find(Id, Timeout, Retry - 1);
         Pid ->
             {ok, Pid}
     end.
