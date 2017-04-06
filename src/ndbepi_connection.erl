@@ -2,8 +2,6 @@
 
 -include("internal.hrl").
 
--import(ndbepi_util, [number_to_ref/2]).
-
 %% -- private --
 -export([start_link/1]).
 
@@ -76,12 +74,15 @@ loaded(#state{block_no=N}=X) ->
             end
     end.
 
-initialized(State) ->
+initialized(#state{block_mgr=M}=X)
+  when M =/= undefined ->
+    {ok, X};
+initialized(State) -> % TODO
     case baseline_app:find(ndbepi_sup, ndbepi_transporters, 100, 1) of
         undefined ->
             {stop, not_found};
         Pid ->
-            initialized(hd(baseline_app:children(Pid)), State) % TODO
+            initialized(hd(baseline_app:children(Pid)), State)
     end.
 
 initialized(Pid, #state{block_no=N}=X) ->
@@ -112,7 +113,7 @@ start_transaction(Pid, #signal{send_node_id=S}=D, BlockNo) ->
                                         signal_data_length = 3,
                                         signal_data = [
                                                        0,
-                                                       number_to_ref(BlockNo, S),
+                                                       ?NUMBER_TO_REF(BlockNo, S),
                                                        0
                                                       ]
                                        }, [], 3000) of

@@ -124,6 +124,17 @@
 
 -define(MAX_API_BLOCK_NO, 16#ffff).
 
+
+-define(NUMBER_TO_REF(Block, Node), ((Block bsl 16) bor Node)).
+
+-define(REF_TO_BLOCK(Ref), (Ref bsr 16)).
+
+-define(REF_TO_NODE(Ref), (Ref band 16#0000ffff)).
+
+-define(NUMBER_TO_INDEX(Number), (Number - ?MIN_API_BLOCK_NO)).
+
+-define(INDEX_TO_NUMBER(Index), (Index + ?MIN_API_BLOCK_NO)).
+
 %% == record ==
 
 -record(signal,

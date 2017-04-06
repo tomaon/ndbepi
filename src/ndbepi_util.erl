@@ -4,11 +4,8 @@
 
 %% -- private --
 -export([pack/2, unpack/2]).
--export([number_to_ref/2, ref_to_block/1, ref_to_node/1]).
--export([number_to_index/1, index_to_number/1]).
 -export([binary_to_word/2, binary_to_words/2,
          word_to_binary/2, words_to_binary/2]).
--export([sections_to_words/2]).
 
 %% -- internal --
 
@@ -84,6 +81,8 @@
 -define(WORD3_SHIFT_SEND_BLOCK_NO,                0).
 -define(WORD3_SHIFT_RECV_BLOCK_NO,               16).
 
+-define(GET(Word, Shift, Mask), ((Word band Mask) bsr Shift)).
+
 -type(byte_order() :: 0|1).
 
 %% == private ==
@@ -148,13 +147,13 @@ pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
                       ]),
 
     %% checksum: 0 .. 1
-    words_to_binary(case C of 0 -> L; 1 -> L ++ [bchecksum(L, 0)] end, B).
+    words_to_binary(case C of 0 -> L; 1 -> L ++ [checksum(L, 0)] end, B).
 
 -spec unpack(binary(), signal()) -> signal().
 unpack(Binary, #signal{}=S) ->
 
     <<W:?WORD(1)/big-unit:8>> = binary_part(Binary, 0, ?WORD(1)),
-    ByteOrder = bget(W, ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1), % 1 or 3
+    ByteOrder = ?GET(W, ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1), % 1 or 3
 
     W1 = binary_to_word(Binary, ?WORD(0), ByteOrder),
     W2 = binary_to_word(Binary, ?WORD(1), ByteOrder),
@@ -162,98 +161,62 @@ unpack(Binary, #signal{}=S) ->
 
     S#signal {
       gsn =
-          bget(W2, ?WORD2_SHIFT_GSN, ?WORD2_MASK_GSN),
+          ?GET(W2, ?WORD2_SHIFT_GSN, ?WORD2_MASK_GSN),
       send_block_no =
-          bget(W3, ?WORD3_SHIFT_SEND_BLOCK_NO, ?WORD3_MASK_SEND_BLOCK_NO),
+          ?GET(W3, ?WORD3_SHIFT_SEND_BLOCK_NO, ?WORD3_MASK_SEND_BLOCK_NO),
       recv_block_no =
-          bget(W3, ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO),
+          ?GET(W3, ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO),
       byte_order =
           ByteOrder,
       checksum_included =
-          bget(W1, ?WORD1_SHIFT_CHECKSUM_INCLUDED, ?WORD1_MASK_CHECKSUM_INCLUDED),
+          ?GET(W1, ?WORD1_SHIFT_CHECKSUM_INCLUDED, ?WORD1_MASK_CHECKSUM_INCLUDED),
       signal_id_included =
-          bget(W1, ?WORD1_SHIFT_SIGNAL_ID_INCLUDED, ?WORD1_MASK_SIGNAL_ID_INCLUDED),
+          ?GET(W1, ?WORD1_SHIFT_SIGNAL_ID_INCLUDED, ?WORD1_MASK_SIGNAL_ID_INCLUDED),
       compressed =
-          bget(W1, ?WORD1_SHIFT_COMPRESSED, ?WORD1_MASK_COMPRESSED),
+          ?GET(W1, ?WORD1_SHIFT_COMPRESSED, ?WORD1_MASK_COMPRESSED),
       message_length =
-          bget(W1, ?WORD1_SHIFT_MESSAGE_LENGTH, ?WORD1_MASK_MESSAGE_LENGTH),
+          ?GET(W1, ?WORD1_SHIFT_MESSAGE_LENGTH, ?WORD1_MASK_MESSAGE_LENGTH),
       fragment_info =
-          bget(W1, ?WORD1_SHIFT_FRAGMENT_INFO_1, ?WORD1_MASK_FRAGMENT_INFO_1)
+          ?GET(W1, ?WORD1_SHIFT_FRAGMENT_INFO_1, ?WORD1_MASK_FRAGMENT_INFO_1)
           bor
-          bget(W1, ?WORD1_SHIFT_FRAGMENT_INFO_2, ?WORD1_MASK_FRAGMENT_INFO_2),
+          ?GET(W1, ?WORD1_SHIFT_FRAGMENT_INFO_2, ?WORD1_MASK_FRAGMENT_INFO_2),
       prio =
-          bget(W1, ?WORD1_SHIFT_PRIO, ?WORD1_MASK_PRIO),
+          ?GET(W1, ?WORD1_SHIFT_PRIO, ?WORD1_MASK_PRIO),
       version_id =
-          bget(W2, ?WORD2_SHIFT_VERSION_ID, ?WORD2_MASK_VERSION_ID),
+          ?GET(W2, ?WORD2_SHIFT_VERSION_ID, ?WORD2_MASK_VERSION_ID),
       trace =
-          bget(W2, ?WORD2_SHIFT_TRACE, ?WORD2_MASK_TRACE),
+          ?GET(W2, ?WORD2_SHIFT_TRACE, ?WORD2_MASK_TRACE),
       signal_data_length =
-          bget(W1, ?WORD1_SHIFT_SIGNAL_DATA_LENGTH, ?WORD1_MASK_SIGNAL_DATA_LENGTH),
+          ?GET(W1, ?WORD1_SHIFT_SIGNAL_DATA_LENGTH, ?WORD1_MASK_SIGNAL_DATA_LENGTH),
       sections_length =
-          bget(W2, ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS)
+          ?GET(W2, ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS)
      }.
-
-%%
-%% ~/include/kernel/RefConvert.hpp
-%%
-
--spec number_to_ref(pos_integer(), pos_integer()) -> pos_integer().
-number_to_ref(Block, Node) ->
-    (Block bsl 16) bor Node.
-
--spec ref_to_block(pos_integer()) -> pos_integer().
-ref_to_block(Ref) ->
-    Ref bsr 16.
-
--spec ref_to_node(pos_integer()) -> pos_integer().
-ref_to_node(Ref) ->
-    Ref band 16#0000ffff.
-
-%%
-%% ~/src/ndbapi/TransporterFacade.cpp
-%%
-
--spec number_to_index(non_neg_integer()) -> non_neg_integer().
-number_to_index(Number) ->
-    Number - ?MIN_API_BLOCK_NO.
-
--spec index_to_number(non_neg_integer()) -> non_neg_integer().
-index_to_number(Index) ->
-    Index + ?MIN_API_BLOCK_NO.
 
 
 -spec binary_to_word(binary(), byte_order()) -> non_neg_integer().
 binary_to_word(Binary, ByteOrder) ->
     binary_to_word(Binary, 0, ByteOrder).
 
-binary_to_word(Binary, Start, 0) ->
-    <<W:?WORD(1)/integer-unsigned-little-unit:8>> = binary_part(Binary, Start, ?WORD(1)),
-    W;
-binary_to_word(Binary, Start, 1) ->
-    <<W:?WORD(1)/integer-unsigned-big-unit:8>> = binary_part(Binary, Start, ?WORD(1)),
-    W.
+binary_to_word(Binary, Start, ByteOrder) ->
+    baseline_binary:decode_unsigned(Binary, Start, ?WORD(1), endianness(ByteOrder)).
 
 -spec binary_to_words(binary(), byte_order()) -> [non_neg_integer()].
 binary_to_words(Binary, ByteOrder) ->
-    lists:map(fun(E) -> binary_to_word(Binary, ?WORD(1) * E, ByteOrder) end,
-              lists:seq(0, byte_size(Binary) div ?WORD(1) - 1)).
+    baseline_binary:decode_unsigned(Binary, 0, byte_size(Binary), endianness(ByteOrder), ?WORD(1)).
 
 -spec word_to_binary(non_neg_integer(), byte_order()) -> binary().
-word_to_binary(Word, 0) ->
-    <<Word:?WORD(1)/integer-unsigned-little-unit:8>>;
-word_to_binary(Word, 1) ->
-    <<Word:?WORD(1)/integer-unsigned-big-unit:8>>.
+word_to_binary(Word, ByteOrder) ->
+    baseline_binary:encode_unsigned(Word, ?WORD(1), endianness(ByteOrder)).
 
 -spec words_to_binary([non_neg_integer()], byte_order()) -> binary().
 words_to_binary(Words, ByteOrder) ->
     list_to_binary(lists:map(fun(E) -> word_to_binary(E, ByteOrder) end, Words)).
 
 
--spec sections_to_words([term()], byte_order()) -> {non_neg_integer(), [integer()]}.
+%% == internal ==
+
 sections_to_words(Sections, ByteOrder) ->
     sections_to_words(Sections, ByteOrder, 0, [], []).
-
-%% == internal ==
 
 sections_to_words([], _ByteOrder, N, List1, List2) ->
     {N, lists:reverse(List1) ++ lists:reverse(List2)};
@@ -261,22 +224,22 @@ sections_to_words([H|T], ByteOrder, N, List1, List2) ->
     L = case H of
             H when is_integer(H), H =< 16#ffffffff ->
                 [H];
-            H when is_integer(H) -> % TODO
-                case ByteOrder of
-                    0 -> [H band 16#ffffffff, H bsr 32];
-                    1 -> [H bsr 32, H band 16#ffffffff]
-                end;
+            %% H when is_integer(H) -> % TODO
+            %%     case ByteOrder of
+            %%         0 -> [H band 16#ffffffff, H bsr 32];
+            %%         1 -> [H bsr 32, H band 16#ffffffff]
+            %%     end;
             H when is_binary(H) ->
                 binary_to_words(<<H/binary, 0:?WORD(1)/big-unit:8>>, 0)
         end,
     sections_to_words(T, ByteOrder, N + length(L), [length(L)|List1], [L|List2]).
 
 
-bchecksum(List, Acc) ->
-    lists:foldl(fun(E, A) -> A bxor E end, Acc, List).
-
-bget(Word, Shift, Mask) ->
-    (Word band Mask) bsr Shift.
-
 bpack(Tuple, List) ->
     lists:foldl(fun({N, S, M}, A) -> A bor ((element(N, Tuple) bsl S) band M) end, 0, List).
+
+checksum(List, Acc) ->
+    lists:foldl(fun(E, A) -> A bxor E end, Acc, List).
+
+endianness(0) -> little;
+endianness(1) -> big.

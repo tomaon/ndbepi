@@ -3,7 +3,6 @@
 -include("internal.hrl").
 
 -import(ndbepi_util, [binary_to_word/2, binary_to_words/2,
-                      number_to_ref/2,
                       pack/2, unpack/2]).
 
 %%
@@ -260,7 +259,7 @@ regreq(#signal{send_node_id=N}=S) ->
            recv_block_no = ?QMGR,
            signal_data_length = 3,
            signal_data = [
-                          number_to_ref(?API_CLUSTERMGR, N),
+                          ?NUMBER_TO_REF(?API_CLUSTERMGR, N),
                           ?NDB_VERSION_ID,
                           ?MYSQL_VERSION_ID
                          ]
