@@ -2,8 +2,8 @@
 
 -include("internal.hrl").
 
--import(ndbepi_util, [binary_to_word/3, binary_to_words/2,
-                      checksum/2, find/3, number_to_ref/2,
+-import(ndbepi_util, [binary_to_word/2, binary_to_words/2,
+                      number_to_ref/2,
                       pack/2, unpack/2]).
 
 %%
@@ -77,7 +77,7 @@ deliver(Pid, Binary, #signal{byte_order=B, signal_id_included=0}=S) ->
     Pid ! S#signal{signal_data = binary_to_words(Binary, B)};
 deliver(Pid, Binary, #signal{byte_order=B, signal_id_included=1}=S) ->
     {I, R} = split_binary(Binary, ?WORD(1)),
-    Pid ! S#signal{signal_id = binary_to_word(I, 0, B), signal_data = binary_to_words(R, B)}.
+    Pid ! S#signal{signal_id = binary_to_word(I, B), signal_data = binary_to_words(R, B)}.
 
 %% -- behaviour: gen_server --
 
@@ -125,17 +125,17 @@ setup(Args) ->
 
 
 initialized([Interval, Default, Args]) ->
-    case find(ndbepi_block_mgr, 100, 10) of
-        {ok, Pid} ->
+    case baseline_app:find(ndbepi_sup, ndbepi_block_mgr, 100, 10) of
+        undefined ->
+            {stop, not_found, undefined};
+        Pid ->
             try baseline_ets:tab(Pid) of
                 Tab ->
                     found(Args, #state{interval = Interval, default = Default, tab = Tab})
             catch
                 error:Reason ->
                     {stop, Reason, undefined}
-            end;
-        {error, Reason} ->
-            {stop, Reason, undefined}
+            end
     end.
 
 found(Args, #state{socket=undefined}=X) ->
@@ -200,7 +200,7 @@ accepted(Binary, #signal{checksum_included=0, message_length=M}=S, State) ->
     checked(binary_part(Binary, {?WORD(3), ?WORD(M-3)}), S, State);
 accepted(Binary, #signal{checksum_included=1, message_length=M}=S, State) ->
     {B, <<C:?WORD(1)/big-unit:8>>} = split_binary(Binary, ?WORD(M-1)),
-    case checksum(B, big) of
+    case mgmepi_util:checksum(B, ?WORD(M-1), ?WORD(1)) of
         C ->
             checked(binary_part(B, {?WORD(3), ?WORD(M-(3+1))}), S, State)
     end.

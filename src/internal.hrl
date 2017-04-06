@@ -55,7 +55,7 @@
 
 %%efine(MIN_BLOCK_NO,     ?BACKUP).
 %%efine(MAX_BLOCK_NO,     ?TRPMAN).
-%%efind(NO_OF_BLOCKS,     (MAX_BLOCK_NO - MIN_BLOCK_NO + 1)).
+%%efine(NO_OF_BLOCKS,     (MAX_BLOCK_NO - MIN_BLOCK_NO + 1)).
 
 %%efine(API_PACKED,       16#07ff). % 2047
 

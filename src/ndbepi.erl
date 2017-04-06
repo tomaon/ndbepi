@@ -2,8 +2,6 @@
 
 -include("internal.hrl").
 
--import(ndbepi_util, [find/3]).
-
 %% -- public --
 -export([start/0, stop/0]).
 -export([connect/0]).
@@ -24,21 +22,21 @@ stop() ->
 
 -spec connect() -> {ok, pid()}|{error, _}.
 connect() ->
-    case find(ndbepi_block_mgr, 100, 1) of
-        {ok, Pid} ->
-            connect(baseline_ets:tab(Pid), 10);
-        {error, Reason} ->
-            {error, Reason}
+    case baseline_app:find(ndbepi_sup, ndbepi_block_mgr, 100, 1) of
+        undefined ->
+            {error, not_found};
+        Pid ->
+            connect(baseline_ets:tab(Pid), 10)
     end.
 
 %% == internal ==
 
 connect(Tab, Retry) ->
-    case find(ndbepi_connections, 100, 1) of
-        {ok, Pid} ->
-            connect(Pid, max_block_no(Tab) + 1, Retry);
-        {error, Reason} ->
-            {error, Reason}
+    case baseline_app:find(ndbepi_sup, ndbepi_connections, 100, 1) of
+        undefined ->
+            {error, not_found};
+        Pid ->
+            connect(Pid, max_block_no(Tab) + 1, Retry)
     end.
 
 connect(_Pid, _BlockNo, 0) ->

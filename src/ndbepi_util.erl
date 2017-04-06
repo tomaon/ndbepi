@@ -4,13 +4,11 @@
 
 %% -- private --
 -export([pack/2, unpack/2]).
--export([checksum/2]).
 -export([number_to_ref/2, ref_to_block/1, ref_to_node/1]).
 -export([number_to_index/1, index_to_number/1]).
--export([binary_to_word/3, binary_to_words/2,
+-export([binary_to_word/2, binary_to_words/2,
          word_to_binary/2, words_to_binary/2]).
 -export([sections_to_words/2]).
--export([find/3]).
 
 %% -- internal --
 
@@ -195,11 +193,6 @@ unpack(Binary, #signal{}=S) ->
           bget(W2, ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS)
      }.
 
-
--spec checksum(binary(), endianness()) -> non_neg_integer().
-checksum(Binary, Endianness) ->
-    bchecksum(baseline_binary:binary_to_words(Binary, 0, Endianness), 0).
-
 %%
 %% ~/include/kernel/RefConvert.hpp
 %%
@@ -229,39 +222,36 @@ index_to_number(Index) ->
     Index + ?MIN_API_BLOCK_NO.
 
 
--spec binary_to_word(binary(), non_neg_integer(), byte_order()) -> non_neg_integer().
-binary_to_word(Binary, Start, 0) -> baseline_binary:binary_to_word(Binary, Start, little);
-binary_to_word(Binary, Start, 1) -> baseline_binary:binary_to_word(Binary, Start, big).
+-spec binary_to_word(binary(), byte_order()) -> non_neg_integer().
+binary_to_word(Binary, ByteOrder) ->
+    binary_to_word(Binary, 0, ByteOrder).
+
+binary_to_word(Binary, Start, 0) ->
+    <<W:?WORD(1)/integer-unsigned-little-unit:8>> = binary_part(Binary, Start, ?WORD(1)),
+    W;
+binary_to_word(Binary, Start, 1) ->
+    <<W:?WORD(1)/integer-unsigned-big-unit:8>> = binary_part(Binary, Start, ?WORD(1)),
+    W.
 
 -spec binary_to_words(binary(), byte_order()) -> [non_neg_integer()].
-binary_to_words(Binary, 0) -> baseline_binary:binary_to_words(Binary, 0, little);
-binary_to_words(Binary, 1) -> baseline_binary:binary_to_words(Binary, 0, big).
+binary_to_words(Binary, ByteOrder) ->
+    lists:map(fun(E) -> binary_to_word(Binary, ?WORD(1) * E, ByteOrder) end,
+              lists:seq(0, byte_size(Binary) div ?WORD(1) - 1)).
 
 -spec word_to_binary(non_neg_integer(), byte_order()) -> binary().
-word_to_binary(Word, 0) -> baseline_binary:word_to_binary(Word, little);
-word_to_binary(Word, 1) -> baseline_binary:word_to_binary(Word, big).
+word_to_binary(Word, 0) ->
+    <<Word:?WORD(1)/integer-unsigned-little-unit:8>>;
+word_to_binary(Word, 1) ->
+    <<Word:?WORD(1)/integer-unsigned-big-unit:8>>.
 
 -spec words_to_binary([non_neg_integer()], byte_order()) -> binary().
-words_to_binary(List, 0) -> baseline_binary:words_to_binary(List, little);
-words_to_binary(List, 1) -> baseline_binary:words_to_binary(List, big).
+words_to_binary(Words, ByteOrder) ->
+    list_to_binary(lists:map(fun(E) -> word_to_binary(E, ByteOrder) end, Words)).
 
 
 -spec sections_to_words([term()], byte_order()) -> {non_neg_integer(), [integer()]}.
 sections_to_words(Sections, ByteOrder) ->
     sections_to_words(Sections, ByteOrder, 0, [], []).
-
-
--spec find(id(), timeout(), pos_integer()) -> {ok, pid()}|{error, _}.
-find(_Id, _Timeout, 0) ->
-    {error, not_found};
-find(Id, Timeout, Retry) ->
-    case baseline_app:find(ndbepi_sup, Id) of
-        undefined ->
-            ok = timer:sleep(Timeout),
-            find(Id, Timeout, Retry - 1);
-        Pid ->
-            {ok, Pid}
-    end.
 
 %% == internal ==
 

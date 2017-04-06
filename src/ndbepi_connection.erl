@@ -2,7 +2,7 @@
 
 -include("internal.hrl").
 
--import(ndbepi_util, [find/3, number_to_ref/2]).
+-import(ndbepi_util, [number_to_ref/2]).
 
 %% -- private --
 -export([start_link/1]).
@@ -61,8 +61,10 @@ setup([BlockNo]) ->
 
 
 loaded(#state{block_no=N}=X) ->
-    case find(ndbepi_block_mgr, 100, 1) of
-        {ok, Pid} ->
+    case baseline_app:find(ndbepi_sup, ndbepi_block_mgr, 100, 1) of
+        undefined ->
+            {stop, not_found};
+        Pid ->
             try baseline_ets:insert_new(Pid, {N, self()}) of
                 true ->
                     initialized(X#state{block_mgr = Pid});
@@ -71,17 +73,15 @@ loaded(#state{block_no=N}=X) ->
             catch
                 error:Reason ->
                     {stop, Reason}
-            end;
-        {error, Reason} ->
-            {stop, Reason}
+            end
     end.
 
 initialized(State) ->
-    case find(ndbepi_transporters, 100, 1) of
-        {ok, Pid} ->
-            initialized(hd(baseline_app:children(Pid)), State); % TODO
-        {error, Reason} ->
-            {stop, Reason}
+    case baseline_app:find(ndbepi_sup, ndbepi_transporters, 100, 1) of
+        undefined ->
+            {stop, not_found};
+        Pid ->
+            initialized(hd(baseline_app:children(Pid)), State) % TODO
     end.
 
 initialized(Pid, #state{block_no=N}=X) ->
