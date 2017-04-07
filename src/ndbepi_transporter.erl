@@ -2,7 +2,7 @@
 
 -include("internal.hrl").
 
--import(ndbepi_util, [binary_to_word/2, binary_to_words/2,
+-import(ndbepi_util, [binary_to_word/3, binary_to_words/3,
                       pack/2, unpack/2]).
 
 %%
@@ -73,10 +73,9 @@ cast(Pid, Signal, Sections) ->
 
 -spec deliver(pid(), binary(), signal()) -> signal().
 deliver(Pid, Binary, #signal{byte_order=B, signal_id_included=0}=S) ->
-    Pid ! S#signal{signal_data = binary_to_words(Binary, B)};
+    Pid ! S#signal{signal_data = binary_to_words(Binary, 0, B)};
 deliver(Pid, Binary, #signal{byte_order=B, signal_id_included=1}=S) ->
-    {I, R} = split_binary(Binary, ?WORD(1)),
-    Pid ! S#signal{signal_id = binary_to_word(I, B), signal_data = binary_to_words(R, B)}.
+    Pid ! S#signal{signal_id = binary_to_word(Binary, 0, B), signal_data = binary_to_words(Binary, ?WORD(1), B)}.
 
 %% -- behaviour: gen_server --
 

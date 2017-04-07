@@ -4,7 +4,7 @@
 
 %% -- private --
 -export([pack/2, unpack/2]).
--export([binary_to_word/2, binary_to_words/2,
+-export([binary_to_word/3, binary_to_words/3,
          word_to_binary/2, words_to_binary/2]).
 
 %% -- internal --
@@ -81,6 +81,8 @@
 -define(WORD3_SHIFT_SEND_BLOCK_NO,                0).
 -define(WORD3_SHIFT_RECV_BLOCK_NO,               16).
 
+-define(BYTE_SIZE(Binary, Start), ((size(Binary) - Start) div 8)).
+
 -define(GET(Word, Shift, Mask), ((Word band Mask) bsr Shift)).
 
 -type(byte_order() :: 0|1).
@@ -96,48 +98,48 @@ pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
 
     L = lists:flatten([
                        %% header: 3
-                       bpack(T, [
-                                 {#signal.byte_order,
-                                  ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1},
-                                 {#signal.fragment_info,
-                                  ?WORD1_SHIFT_FRAGMENT_INFO_1, ?WORD1_MASK_FRAGMENT_INFO_1},
-                                 {#signal.signal_id_included,
-                                  ?WORD1_SHIFT_SIGNAL_ID_INCLUDED, ?WORD1_MASK_SIGNAL_ID_INCLUDED},
-                                 {#signal.compressed,
-                                  ?WORD1_SHIFT_COMPRESSED, ?WORD1_MASK_COMPRESSED},
-                                 {#signal.checksum_included,
-                                  ?WORD1_SHIFT_CHECKSUM_INCLUDED, ?WORD1_MASK_CHECKSUM_INCLUDED},
-                                 {#signal.prio,
-                                  ?WORD1_SHIFT_PRIO, ?WORD1_MASK_PRIO},
-                                 {#signal.byte_order,
-                                  ?WORD1_SHIFT_BYTE_ORDER_2, ?WORD1_MASK_BYTE_ORDER_2},
-                                 {#signal.message_length,
-                                  ?WORD1_SHIFT_MESSAGE_LENGTH, ?WORD1_MASK_MESSAGE_LENGTH},
-                                 {#signal.byte_order,
-                                  ?WORD1_SHIFT_BYTE_ORDER_3, ?WORD1_MASK_BYTE_ORDER_3},
-                                 {#signal.fragment_info,
-                                  ?WORD1_SHIFT_FRAGMENT_INFO_2, ?WORD1_MASK_FRAGMENT_INFO_2},
-                                 {#signal.signal_data_length,
-                                  ?WORD1_SHIFT_SIGNAL_DATA_LENGTH, ?WORD1_MASK_SIGNAL_DATA_LENGTH},
-                                 {#signal.byte_order,
-                                  ?WORD1_SHIFT_BYTE_ORDER_4, ?WORD1_MASK_BYTE_ORDER_4}
-                                ]),
-                       bpack(T, [
-                                 {#signal.gsn,
-                                  ?WORD2_SHIFT_GSN, ?WORD2_MASK_GSN},
-                                 {#signal.version_id,
-                                  ?WORD2_SHIFT_VERSION_ID, ?WORD2_MASK_VERSION_ID},
-                                 {#signal.trace,
-                                  ?WORD2_SHIFT_TRACE, ?WORD2_MASK_TRACE},
-                                 {#signal.sections_length,
-                                  ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS}
-                                ]),
-                       bpack(T, [
-                                 {#signal.send_block_no,
-                                  ?WORD3_SHIFT_SEND_BLOCK_NO, ?WORD3_MASK_SEND_BLOCK_NO},
-                                 {#signal.recv_block_no,
-                                  ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO}
-                                ]),
+                       word(T, [
+                                {#signal.byte_order,
+                                 ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1},
+                                {#signal.fragment_info,
+                                 ?WORD1_SHIFT_FRAGMENT_INFO_1, ?WORD1_MASK_FRAGMENT_INFO_1},
+                                {#signal.signal_id_included,
+                                 ?WORD1_SHIFT_SIGNAL_ID_INCLUDED, ?WORD1_MASK_SIGNAL_ID_INCLUDED},
+                                {#signal.compressed,
+                                 ?WORD1_SHIFT_COMPRESSED, ?WORD1_MASK_COMPRESSED},
+                                {#signal.checksum_included,
+                                 ?WORD1_SHIFT_CHECKSUM_INCLUDED, ?WORD1_MASK_CHECKSUM_INCLUDED},
+                                {#signal.prio,
+                                 ?WORD1_SHIFT_PRIO, ?WORD1_MASK_PRIO},
+                                {#signal.byte_order,
+                                 ?WORD1_SHIFT_BYTE_ORDER_2, ?WORD1_MASK_BYTE_ORDER_2},
+                                {#signal.message_length,
+                                 ?WORD1_SHIFT_MESSAGE_LENGTH, ?WORD1_MASK_MESSAGE_LENGTH},
+                                {#signal.byte_order,
+                                 ?WORD1_SHIFT_BYTE_ORDER_3, ?WORD1_MASK_BYTE_ORDER_3},
+                                {#signal.fragment_info,
+                                 ?WORD1_SHIFT_FRAGMENT_INFO_2, ?WORD1_MASK_FRAGMENT_INFO_2},
+                                {#signal.signal_data_length,
+                                 ?WORD1_SHIFT_SIGNAL_DATA_LENGTH, ?WORD1_MASK_SIGNAL_DATA_LENGTH},
+                                {#signal.byte_order,
+                                 ?WORD1_SHIFT_BYTE_ORDER_4, ?WORD1_MASK_BYTE_ORDER_4}
+                               ]),
+                       word(T, [
+                                {#signal.gsn,
+                                 ?WORD2_SHIFT_GSN, ?WORD2_MASK_GSN},
+                                {#signal.version_id,
+                                 ?WORD2_SHIFT_VERSION_ID, ?WORD2_MASK_VERSION_ID},
+                                {#signal.trace,
+                                 ?WORD2_SHIFT_TRACE, ?WORD2_MASK_TRACE},
+                                {#signal.sections_length,
+                                 ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS}
+                               ]),
+                       word(T, [
+                                {#signal.send_block_no,
+                                 ?WORD3_SHIFT_SEND_BLOCK_NO, ?WORD3_MASK_SEND_BLOCK_NO},
+                                {#signal.recv_block_no,
+                                 ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO}
+                               ]),
                        %% signal_id: 0 .. 1
                        case I of 0 -> []; 1 -> T#signal.signal_id end,
                        %% signal_data: 0 .. 25
@@ -193,16 +195,14 @@ unpack(Binary, #signal{}=S) ->
      }.
 
 
--spec binary_to_word(binary(), byte_order()) -> non_neg_integer().
-binary_to_word(Binary, ByteOrder) ->
-    binary_to_word(Binary, 0, ByteOrder).
-
+-spec binary_to_word(binary(), non_neg_integer(), byte_order()) -> non_neg_integer().
 binary_to_word(Binary, Start, ByteOrder) ->
     baseline_binary:decode_unsigned(Binary, Start, ?WORD(1), endianness(ByteOrder)).
 
--spec binary_to_words(binary(), byte_order()) -> [non_neg_integer()].
-binary_to_words(Binary, ByteOrder) ->
-    baseline_binary:decode_unsigned(Binary, 0, byte_size(Binary), endianness(ByteOrder), ?WORD(1)).
+-spec binary_to_words(binary(), non_neg_integer(), byte_order()) -> [non_neg_integer()].
+binary_to_words(Binary, Start, ByteOrder) ->
+    B = <<Binary/binary, 0:?WORD(3)/unit:8>>,
+    baseline_binary:decode_unsigned(B, Start, ?BYTE_SIZE(B, Start), endianness(ByteOrder), ?WORD(1)).
 
 -spec word_to_binary(non_neg_integer(), byte_order()) -> binary().
 word_to_binary(Word, ByteOrder) ->
@@ -215,6 +215,9 @@ words_to_binary(Words, ByteOrder) ->
 
 %% == internal ==
 
+endianness(0) -> little;
+endianness(1) -> big.
+
 sections_to_words(Sections, ByteOrder) ->
     sections_to_words(Sections, ByteOrder, 0, [], []).
 
@@ -222,21 +225,13 @@ sections_to_words([], _ByteOrder, N, List1, List2) ->
     {N, lists:reverse(List1) ++ lists:reverse(List2)};
 sections_to_words([H|T], ByteOrder, N, List1, List2) ->
     L = case H of
-            H when is_integer(H), H =< 16#ffffffff ->
-                [H];
-            %% H when is_integer(H) -> % TODO
-            %%     case ByteOrder of
-            %%         0 -> [H band 16#ffffffff, H bsr 32];
-            %%         1 -> [H bsr 32, H band 16#ffffffff]
-            %%     end;
             H when is_binary(H) ->
-                binary_to_words(<<H/binary, 0:?WORD(1)/big-unit:8>>, 0)
+                binary_to_words(H, 0, ByteOrder)
+                %% H when is_integer(H) ->
+                %%     word_to_binary(H, ByteOrder)
         end,
     sections_to_words(T, ByteOrder, N + length(L), [length(L)|List1], [L|List2]).
 
 
-bpack(Tuple, List) ->
+word(Tuple, List) ->
     lists:foldl(fun({N, S, M}, A) -> A bor ((element(N, Tuple) bsl S) band M) end, 0, List).
-
-endianness(0) -> little;
-endianness(1) -> big.
