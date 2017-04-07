@@ -74,10 +74,7 @@ loaded(#state{block_no=N}=X) ->
             end
     end.
 
-initialized(#state{block_mgr=M}=X)
-  when M =/= undefined ->
-    {ok, X};
-initialized(State) -> % TODO
+initialized(State) ->
     case baseline_app:find(ndbepi_sup, ndbepi_transporters, 100, 1) of
         undefined ->
             {stop, not_found};
@@ -86,9 +83,10 @@ initialized(State) -> % TODO
     end.
 
 initialized(Pid, #state{block_no=N}=X) ->
-    case start_transaction(Pid, ndbepi_transporter:default(Pid, 3000), N) of
-        {ok, TCCon} ->
-            {ok, X#state{tccon = TCCon}};
+    case get_table_by_name(Pid, <<"test/def/city">>, ndbepi_transporter:default(Pid, 3000), N) of
+        {ok, Signal} ->
+            error_logger:info_msg("~p~n", [Signal]),
+            {ok, X};
         {error, Reason} ->
             {stop, Reason}
     end.
@@ -100,51 +98,82 @@ received(Signal, State) ->
 
 
 
-start_transaction(Pid, #signal{send_node_id=S}=D, BlockNo) ->
+get_table_by_name(Pid, Name, #signal{send_node_id=S}=D, BlockNo) ->
     %%
-    %% ~/src/ndbapi/Ndb.cpp: Ndb::NDB_connect/2
-    %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZECONF/1
-    %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZEREF/1
+    %% ~/include/kernel/signaldata/GetTabInfo.hpp
     %%
-    case ndbepi_transporter:call(Pid, D#signal{
-                                        gsn = ?GSN_TCSEIZEREQ,
-                                        send_block_no = BlockNo,
-                                        recv_block_no = ?DBTC,
-                                        signal_data_length = 3,
-                                        signal_data = [
-                                                       0,
-                                                       ?NUMBER_TO_REF(BlockNo, S),
-                                                       0
-                                                      ]
-                                       }, [], 3000) of
-        {ok, #signal{gsn=?GSN_TCSEIZECONF, signal_data=L}} ->
-            {ok, lists:nth(2, L)};
-        {ok, #signal{gsn=?GSN_TCSEIZEREF, signal_data=L}} ->
-            {error, {shutdown, ndberror(lists:nth(2, L))}};
+    case ndbepi_transporter:call(Pid, D#signal{gsn = ?GSN_GET_TABINFOREQ,
+                                               send_block_no = BlockNo,
+                                               recv_block_no = ?DBDICT,
+                                               signal_data_length = 5,
+                                               signal_data = [
+                                                              0,                          % senderData
+                                                              ?NUMBER_TO_REF(BlockNo, S), % senderRef
+                                                              3,                          % requestType
+                                                              byte_size(Name) + 1,        % tableNameLen
+                                                              0                           % schemaTransId
+                                                        ],
+                                               sections_length = 1
+                                              }, [ Name ], 3000) of
+        {ok, #signal{gsn=?GSN_GET_TABINFO_CONF}=X} ->
+            {ok, X};
+        {ok, #signal{gsn=?GSN_GET_TABINFOREF, signal_data=L}} ->
+            {error, {shutdown, ndberror(lists:nth(6, L))}};
         {error, Reason} ->
             {error, Reason}
     end.
 
+%% start_transaction(Pid, #signal{send_node_id=S}=D, BlockNo) ->
+%%     %%
+%%     %% ~/src/ndbapi/Ndb.cpp: Ndb::NDB_connect/2
+%%     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZECONF/1
+%%     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZEREF/1
+%%     %%
+%%     case ndbepi_transporter:call(Pid, D#signal{
+%%                                         gsn = ?GSN_TCSEIZEREQ,
+%%                                         send_block_no = BlockNo,
+%%                                         recv_block_no = ?DBTC,
+%%                                         signal_data_length = 3,
+%%                                         signal_data = [
+%%                                                        0,
+%%                                                        ?NUMBER_TO_REF(BlockNo, S),
+%%                                                        0
+%%                                                       ]
+%%                                        }, [], 3000) of
+%%         {ok, #signal{gsn=?GSN_TCSEIZECONF, signal_data=L}} ->
+%%             {ok, lists:nth(2, L)};
+%%         {ok, #signal{gsn=?GSN_TCSEIZEREF, signal_data=L}} ->
+%%             {error, {shutdown, ndberror(lists:nth(2, L))}};
+%%         {error, Reason} ->
+%%             {error, Reason}
+%%     end.
 
 %%
 %% ~/include/ndbapi/ndberror.hpp : ndberror_classification_enum
 %%
-ndberror( 0) -> <<"none">>;
-ndberror( 1) -> <<"application">>;
-ndberror( 2) -> <<"no_data_found">>;
-ndberror( 3) -> <<"constraint_violation">>;
-ndberror( 4) -> <<"schema_error">>;
-ndberror( 5) -> <<"user_defined">>;
-ndberror( 6) -> <<"insufficient_space">>;
-ndberror( 7) -> <<"temporary_resource">>;
-ndberror( 8) -> <<"node_recovery">>;
-ndberror( 9) -> <<"overload">>;
-ndberror(10) -> <<"timeout_expired">>;
-ndberror(11) -> <<"unknown_result">>;
-ndberror(12) -> <<"internal_error">>;
-ndberror(13) -> <<"function_not_implemented">>;
-ndberror(14) -> <<"unknown_error_code">>;
-ndberror(15) -> <<"node_shutdown">>;
-ndberror(16) -> <<"configuration">>;
-ndberror(17) -> <<"schema_object_already_exists">>;
-ndberror(18) -> <<"internal_temporary">>.
+%% ndberror( 0) -> <<"none">>;
+%% ndberror( 1) -> <<"application">>;
+%% ndberror( 2) -> <<"no_data_found">>;
+%% ndberror( 3) -> <<"constraint_violation">>;
+%% ndberror( 4) -> <<"schema_error">>;
+%% ndberror( 5) -> <<"user_defined">>;
+%% ndberror( 6) -> <<"insufficient_space">>;
+%% ndberror( 7) -> <<"temporary_resource">>;
+%% ndberror( 8) -> <<"node_recovery">>;
+%% ndberror( 9) -> <<"overload">>;
+%% ndberror(10) -> <<"timeout_expired">>;
+%% ndberror(11) -> <<"unknown_result">>;
+%% ndberror(12) -> <<"internal_error">>;
+%% ndberror(13) -> <<"function_not_implemented">>;
+%% ndberror(14) -> <<"unknown_error_code">>;
+%% ndberror(15) -> <<"node_shutdown">>;
+%% ndberror(16) -> <<"configuration">>;
+%% ndberror(17) -> <<"schema_object_already_exists">>;
+%% ndberror(18) -> <<"internal_temporary">>.
+
+ndberror(701) -> <<"Busy = 701">>;
+ndberror(702) -> <<"TableNameTooLong">>;
+ndberror(709) -> <<"InvalidTableId">>;
+ndberror(710) -> <<"NoFetchByName">>;
+ndberror(723) -> <<"TableNotDefined">>;
+ndberror(_)   -> <<"?">>.

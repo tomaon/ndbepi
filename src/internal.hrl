@@ -35,7 +35,7 @@
 %%efine(DBLQH,   16#00f7). % 247: Local Query Handler, coordinator of 2-phase commits
 %%efine(DBACC,   16#00f8). % 248: ACCess control and lock management
 %%efine(DBTUP,   16#00f9). % 249: TUPle manager, physical storage
-%%efine(DBDICT,  16#00fa). % 250: data DICTionary
+-define(DBDICT,  16#00fa). % 250: data DICTionary
 %%efine(DBCNTR,  16#00fb). % 251: startup CoordiNaToR, initialisation and configuration
 -define(QMGR,    16#00fc). % 252: Queue ManaGeR
 %%efine(NDBFS,   16#00fd). % 253: NDB File System abstraction layer
@@ -69,6 +69,10 @@
 -define(GSN_API_REGCONF,                    1).
 -define(GSN_API_REGREF,                     2).
 -define(GSN_API_REGREQ,                     3).
+-define(GSN_GET_TABINFO_CONF,             190).
+-define(GSN_GET_TABINFOREF,                23).
+-define(GSN_GET_TABINFOREQ,                24).
+
 %%efine(GSN_ATTRINFO,                       4).
 %%efine(GSN_TRANSID_AI,                     5).
 %%efine(GSN_KEYINFO,                        6).
@@ -85,8 +89,6 @@
 %%efine(GSN_TC_COMMITCONF,                 17).
 %%efine(GSN_TC_COMMITREF,                  18).
 %%efine(GSN_TC_COMMITREQ,                  19).
-%%efine(GSN_GET_TABINFOREF,                23). % CONF=190
-%%efine(GSN_GET_TABINFOREQ,                24). % CONF=190
 %%efine(GSN_NODE_FAILREP,                  26).
 %%efine(GSN_NF_COMPLETEREP,                27).
 %%efine(GSN_TCRELEASECONF,                 34).
@@ -100,7 +102,6 @@
 %%efine(GSN_ALLOC_NODEID_REQ,              60).
 %%efine(GSN_CLOSE_COMREQ,                 127).
 %%efine(GSN_CONNECT_REP,                  163).
-%%efine(GSN_GET_TABINFOCONF,              190). % REF=23,REQ=24, !GSN_GET_TABINFO_CONF
 %%efine(GSN_DISCONNECT_REP,               235).
 %%efine(GSN_TAKE_OVERTCCONF,              399).
 %%efine(GSN_ARBIT_STARTREQ,               477).
@@ -157,7 +158,8 @@
           signal_data = []       :: [integer()],                 % 0 .. 25
           signal_id = 0          :: non_neg_integer(),
           sections_length = 0    :: non_neg_integer(),
-          sections = []          :: [term()]
+          sections = []          :: [term()],
+          rest :: binary() % TODO
         }).
 
 %% == type ==

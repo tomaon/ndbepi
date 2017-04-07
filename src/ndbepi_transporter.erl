@@ -2,7 +2,7 @@
 
 -include("internal.hrl").
 
--import(ndbepi_util, [binary_to_word/3, binary_to_words/3,
+-import(ndbepi_util, [binary_to_word/3, binary_to_words/4,
                       pack/2, unpack/2]).
 
 %%
@@ -72,10 +72,14 @@ cast(Pid, Signal, Sections) ->
 
 
 -spec deliver(pid(), binary(), signal()) -> signal().
-deliver(Pid, Binary, #signal{byte_order=B, signal_id_included=0}=S) ->
-    Pid ! S#signal{signal_data = binary_to_words(Binary, 0, B)};
 deliver(Pid, Binary, #signal{byte_order=B, signal_id_included=1}=S) ->
-    Pid ! S#signal{signal_id = binary_to_word(Binary, 0, B), signal_data = binary_to_words(Binary, ?WORD(1), B)}.
+    deliver(Pid, Binary, ?WORD(1), S#signal{signal_id = binary_to_word(Binary, 0, B)});
+deliver(Pid, Binary, Signal) ->
+    deliver(Pid, Binary, 0, Signal).
+
+deliver(Pid, Binary, Start, #signal{byte_order=B, signal_data_length=L}=S) ->
+    {D, R} = split_binary(Binary, Start + ?WORD(L)),
+    Pid ! S#signal{signal_data = binary_to_words(D, Start, ?WORD(L), B), rest = R}.
 
 %% -- behaviour: gen_server --
 
@@ -195,12 +199,12 @@ received(Binary, _Signal, #state{interval=I}=X) ->
     {noreply, X#state{rest = Binary}, I}.
 
 accepted(Binary, #signal{checksum_included=0, message_length=M}=S, State) ->
-    checked(binary_part(Binary, {?WORD(3), ?WORD(M-3)}), S, State);
+    checked(binary_part(Binary, {?WORD(3), ?WORD(M - 3)}), S, State);
 accepted(Binary, #signal{checksum_included=1, message_length=M}=S, State) ->
-    {B, <<C:?WORD(1)/big-unit:8>>} = split_binary(Binary, ?WORD(M-1)),
-    case mgmepi_util:checksum(B, ?WORD(M-1), ?WORD(1)) of
+    {B, <<C:?WORD(1)/big-unit:8>>} = split_binary(Binary, ?WORD(M - 1)),
+    case mgmepi_util:checksum(B, ?WORD(M - 1), ?WORD(1)) of
         C ->
-            checked(binary_part(B, {?WORD(3), ?WORD(M-(3+1))}), S, State)
+            checked(binary_part(B, {?WORD(3), ?WORD(M - 4)}), S, State)
     end.
 
 checked(Binary, #signal{recv_block_no=B}=S, #state{tab=T, rest=R}=X) ->

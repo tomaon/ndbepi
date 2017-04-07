@@ -4,7 +4,7 @@
 
 %% -- private --
 -export([pack/2, unpack/2]).
--export([binary_to_word/3, binary_to_words/3,
+-export([binary_to_word/3, binary_to_words/4,
          word_to_binary/2, words_to_binary/2]).
 
 %% -- internal --
@@ -81,8 +81,6 @@
 -define(WORD3_SHIFT_SEND_BLOCK_NO,                0).
 -define(WORD3_SHIFT_RECV_BLOCK_NO,               16).
 
--define(BYTE_SIZE(Binary, Start), ((size(Binary) - Start) div 8)).
-
 -define(GET(Word, Shift, Mask), ((Word band Mask) bsr Shift)).
 
 -type(byte_order() :: 0|1).
@@ -94,7 +92,7 @@ pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
              signal_data_length=D, sections_length=N}=S, Sections) ->
 
     {SN, SL} = case N of 0 -> {0, []}; _ -> sections_to_words(Sections, B) end,
-    T = S#signal{message_length = 3 + (I + D + N) + C + SN},
+    T = S#signal{message_length = 3 + C + I + D + N + SN},
 
     L = lists:flatten([
                        %% header: 3
@@ -199,10 +197,9 @@ unpack(Binary, #signal{}=S) ->
 binary_to_word(Binary, Start, ByteOrder) ->
     baseline_binary:decode_unsigned(Binary, Start, ?WORD(1), endianness(ByteOrder)).
 
--spec binary_to_words(binary(), non_neg_integer(), byte_order()) -> [non_neg_integer()].
-binary_to_words(Binary, Start, ByteOrder) ->
-    B = <<Binary/binary, 0:?WORD(3)/unit:8>>,
-    baseline_binary:decode_unsigned(B, Start, ?BYTE_SIZE(B, Start), endianness(ByteOrder), ?WORD(1)).
+-spec binary_to_words(binary(), non_neg_integer(), pos_integer(), byte_order()) -> [non_neg_integer()].
+binary_to_words(Binary, Start, Length, ByteOrder) ->
+    baseline_binary:decode_unsigned(Binary, Start, Length, endianness(ByteOrder), ?WORD(1)).
 
 -spec word_to_binary(non_neg_integer(), byte_order()) -> binary().
 word_to_binary(Word, ByteOrder) ->
@@ -212,13 +209,12 @@ word_to_binary(Word, ByteOrder) ->
 words_to_binary(Words, ByteOrder) ->
     list_to_binary(lists:map(fun(E) -> word_to_binary(E, ByteOrder) end, Words)).
 
-
 %% == internal ==
 
 endianness(0) -> little;
 endianness(1) -> big.
 
-sections_to_words(Sections, ByteOrder) ->
+sections_to_words(Sections, ByteOrder) -> % TODO: fragment
     sections_to_words(Sections, ByteOrder, 0, [], []).
 
 sections_to_words([], _ByteOrder, N, List1, List2) ->
@@ -226,9 +222,8 @@ sections_to_words([], _ByteOrder, N, List1, List2) ->
 sections_to_words([H|T], ByteOrder, N, List1, List2) ->
     L = case H of
             H when is_binary(H) ->
-                binary_to_words(H, 0, ByteOrder)
-                %% H when is_integer(H) ->
-                %%     word_to_binary(H, ByteOrder)
+                B = <<H/binary, 0, 0,0,0>>,
+                binary_to_words(B, 0, byte_size(B), ByteOrder)
         end,
     sections_to_words(T, ByteOrder, N + length(L), [length(L)|List1], [L|List2]).
 
