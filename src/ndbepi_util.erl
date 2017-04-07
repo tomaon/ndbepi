@@ -147,7 +147,7 @@ pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
                       ]),
 
     %% checksum: 0 .. 1
-    words_to_binary(case C of 0 -> L; 1 -> L ++ [checksum(L, 0)] end, B).
+    words_to_binary(case C of 0 -> L; 1 -> L ++ [mgmepi_util:checksum(L)] end, B).
 
 -spec unpack(binary(), signal()) -> signal().
 unpack(Binary, #signal{}=S) ->
@@ -237,9 +237,6 @@ sections_to_words([H|T], ByteOrder, N, List1, List2) ->
 
 bpack(Tuple, List) ->
     lists:foldl(fun({N, S, M}, A) -> A bor ((element(N, Tuple) bsl S) band M) end, 0, List).
-
-checksum(List, Acc) ->
-    lists:foldl(fun(E, A) -> A bxor E end, Acc, List).
 
 endianness(0) -> little;
 endianness(1) -> big.
