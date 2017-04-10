@@ -158,8 +158,7 @@
           signal_data = []       :: [integer()],                 % 0 .. 25
           signal_id = 0          :: non_neg_integer(),
           sections_length = 0    :: non_neg_integer(),
-          sections = []          :: [term()],
-          rest :: binary() % TODO
+          sections = <<>>        :: binary()
         }).
 
 %% == type ==

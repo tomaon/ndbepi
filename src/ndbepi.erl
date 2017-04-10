@@ -22,7 +22,7 @@ stop() ->
 
 -spec connect() -> {ok, pid()}|{error, _}.
 connect() ->
-    case baseline_app:find(ndbepi_sup, ndbepi_block_mgr, 100, 1) of
+    case baseline_app:find(ndbepi_sup, ndbepi_ets, 100, 1) of
         undefined ->
             {error, not_found};
         Pid ->

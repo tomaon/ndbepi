@@ -22,6 +22,9 @@ start(StartType, []) ->
                                                       }
                                                      ]}
                                               ])
+            catch
+                Reason ->
+                    {error, Reason}
             after
                 ok = mgmepi:checkin(Mgmepi)
             end;
@@ -35,6 +38,24 @@ stop(State) ->
 %% == internal ==
 
 get_childspecs(Mgmepi) ->
+    get_childspecs(Mgmepi, baseline_app:get_all_env()).
+
+get_childspecs(Mgmepi, Env) ->
+    case mgmepi:alloc_node_id(Mgmepi,
+                              get_value(name, Env, <<"ndbepi">>),
+                              get_value(node_id, Env, 0)) of
+        {ok, NodeId} ->
+            case mgmepi_config:get_config(Mgmepi, NodeId) of
+                {ok, Config} ->
+                    get_childspecs(Env, NodeId, Config);
+                {error, Reason} ->
+                    throw(Reason)
+            end;
+        {error, Reason} ->
+            throw(Reason)
+    end.
+
+get_childspecs(Env, NodeId, Config) ->
     [
      {
        ndbepi_ets,
@@ -62,7 +83,7 @@ get_childspecs(Mgmepi) ->
           baseline_app,
           {
             {one_for_all, 1, 5},
-            get_childspecs(Mgmepi, baseline_app:get_all_env())
+            get_childspecs(Env, NodeId, Config, get_byte_order())
           }
          ]
        },
@@ -99,7 +120,9 @@ get_childspecs(Mgmepi) ->
                {
                  ndbepi_connection,
                  start_link,
-                 []
+                 [
+                  NodeId
+                 ]
                },
                temporary,
                5000,
@@ -117,23 +140,12 @@ get_childspecs(Mgmepi) ->
      }
     ].
 
-get_childspecs(Mgmepi, Env) ->
-    case alloc_node_id(Mgmepi, Env) of
-        {ok, NodeId} ->
-            case get_config(Mgmepi, NodeId) of
-                {ok, Config} ->
-                    ByteOrder = get_byte_order(),
-                    [ get_childspec(Env, ByteOrder, get_node_config(Config, E), E) ||
-                        E <- get_connection_config(Config, NodeId) ];
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
+get_childspecs(Env, NodeId, Config, ByteOrder) ->
+    [ get_childspec(NodeId, Env, ByteOrder, get_node_config(Config, NodeId), E) ||
+        E <- get_connection_config(Config, NodeId) ].
 
-get_childspec(Env, ByteOrder, Nodes, Connections) ->
-    Local  = get_value(?CFG_CONNECTION_NODE_1, Connections, 0),
+
+get_childspec(Local, Env, ByteOrder, Nodes, Connections) ->
     Remote = get_value(?CFG_CONNECTION_NODE_2, Connections, 0),
     SndBuf = get_value(?CFG_TCP_SEND_BUFFER_SIZE, Connections, 2097152),
     RecBuf = get_value(?CFG_TCP_RECEIVE_BUFFER_SIZE, Connections, 2097152),
@@ -179,22 +191,14 @@ get_childspec(Env, ByteOrder, Nodes, Connections) ->
     }.
 
 
-alloc_node_id(Mgmepi, Env) ->
-    mgmepi:alloc_node_id(Mgmepi,
-                         get_value(name, Env, <<"ndbepi">>),
-                         get_value(node_id, Env, 0)).
-
 get_byte_order() ->
     case baseline_app:endianness() of little -> 0; big -> 1 end.
-
-get_config(Mgmepi, NodeId) ->
-    mgmepi_config:get_config(Mgmepi, NodeId).
 
 get_connection_config(Config, NodeId) ->
     mgmepi_config:get_connection_config(Config, NodeId).
 
-get_node_config(Config, Connections) ->
-    hd(mgmepi_config:get_node_config(Config, get_value(?CFG_CONNECTION_NODE_2, Connections, 0))).
+get_node_config(Config, NodeId) ->
+    hd(mgmepi_config:get_node_config(Config, NodeId)).
 
 get_value(Key, List, Default) ->
     baseline_lists:get_value(Key, List, Default).

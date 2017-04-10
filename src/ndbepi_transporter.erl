@@ -18,8 +18,7 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2]).
 
--export([default/2]).
--export([call/4, cast/3]).
+-export([cast/3]).
 -export([deliver/3]).
 
 %% -- internal --
@@ -42,31 +41,6 @@ start_link(Args, Options) ->
     gen_server:start_link(?MODULE, Args, Options).
 
 
--spec default(pid(), timeout()) -> signal().
-default(Pid, Timeout) ->
-    gen_server:call(Pid, default, Timeout).
-
-
--spec call(pid(), signal(), [term()], timeout()) -> {ok, signal()}|{error, _}.
-call(Pid, Signal, Sections, Timeout) ->
-    case monitor(process, Pid) of
-        MonitorRef ->
-            ok = cast(Pid, Signal, Sections),
-            try
-                receive
-                    #signal{}=S ->
-                        {ok, S};
-                    {'DOWN', _, _, _, Reason} ->
-                        {error, Reason}
-                after
-                    Timeout ->
-                        {error, timeout}
-                end
-            after
-                true = demonitor(MonitorRef)
-            end
-    end.
-
 -spec cast(pid(), signal(), [term()]) -> ok.
 cast(Pid, Signal, Sections) ->
     gen_server:cast(Pid, {send, pack(Signal, Sections)}).
@@ -80,7 +54,7 @@ deliver(Pid, Binary, Signal) ->
 
 deliver(Pid, Binary, Start, #signal{byte_order=B, signal_data_length=L}=S) ->
     {D, R} = split_binary(Binary, Start + ?WORD(L)),
-    Pid ! S#signal{signal_data = binary_to_words(D, Start, ?WORD(L), B), rest = R}.
+    Pid ! S#signal{signal_data = binary_to_words(D, Start, ?WORD(L), B), sections = R}.
 
 %% -- behaviour: gen_server --
 
