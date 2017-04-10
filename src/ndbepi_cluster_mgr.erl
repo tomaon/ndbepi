@@ -15,7 +15,7 @@
 
 %% -- internal --
 -record(state, {
-          block_mgr :: undefined|pid()
+          ets :: undefined|pid()
          }).
 
 %% == public ==
@@ -50,10 +50,10 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 %% == internal ==
 
-cleanup(#state{block_mgr=M}=X)
-  when M =/= undefined ->
-    catch true = baseline_ets:delete(M, ?API_CLUSTERMGR),
-    cleanup(X#state{block_mgr = undefined});
+cleanup(#state{ets=E}=X)
+  when E =/= undefined ->
+    catch true = baseline_ets:delete(E, ?API_CLUSTERMGR),
+    cleanup(X#state{ets = undefined});
 cleanup(_) ->
     baseline:flush().
 
@@ -63,13 +63,13 @@ setup(Args) ->
 
 
 initialized([]) ->
-    case baseline_app:find(ndbepi_sup, ndbepi_block_mgr, 100, 10) of
+    case baseline_app:find(ndbepi_sup, ndbepi_ets, 100, 10) of
         undefined ->
             {stop, not_found, undefined};
         Pid ->
-            try baseline_ets:insert(Pid, {?API_CLUSTERMGR, self()}) of
+            try baseline_ets:insert(Pid, {?API_CLUSTERMGR, self(), undefined}) of
                 true ->
-                    {noreply, #state{block_mgr = Pid}}
+                    {noreply, #state{ets = Pid}}
             catch
                 error:Reason ->
                     {stop, Reason, undefined}

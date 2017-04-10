@@ -28,7 +28,8 @@
 -record(state, {
           interval    :: non_neg_integer(),
           default     :: signal(),
-          tab         :: ets:tab(),
+          ets         :: undefined|pid(),
+          tab         :: undefined|ets:tab(),
           socket      :: undefined|gen_tcp:socket(),
           regreq      :: undefined|binary(),
           rest = <<>> :: binary()
@@ -114,6 +115,10 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 %% == internal ==
 
+cleanup(#state{default=D, ets=E}=X)
+  when E =/= undefined ->
+    catch true = baseline_ets:delete(E, D#signal.send_node_id),
+    cleanup(X#state{ets = undefined});
 cleanup(#state{socket=S}=X)
   when S =/= undefined ->
     ok = gen_tcp:close(S),
@@ -126,14 +131,15 @@ setup(Args) ->
     {ok, Args, 300}.
 
 
-initialized([Interval, Default, Args]) ->
-    case baseline_app:find(ndbepi_sup, ndbepi_block_mgr, 100, 10) of
+initialized([Interval, #signal{send_node_id=N}=D, Args]) ->
+    case baseline_app:find(ndbepi_sup, ndbepi_ets, 100, 10) of
         undefined ->
             {stop, not_found, undefined};
         Pid ->
-            try baseline_ets:tab(Pid) of
-                Tab ->
-                    found(Args, #state{interval = Interval, default = Default, tab = Tab})
+            try baseline_ets:insert_new(Pid, {N, self(), D}) of
+                true ->
+                    found(Args, #state{interval = Interval, default = D,
+                                       ets = Pid, tab = baseline_ets:tab(Pid)})
             catch
                 error:Reason ->
                     {stop, Reason, undefined}

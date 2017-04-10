@@ -11,16 +11,15 @@
 
 %% -- internal --
 -record(state, {
-          block_no  :: pos_integer(),
-          block_mgr :: undefined|pid(),
-          tccon     :: undefined|integer() % Transaction Co-ordinator CONnection pointer
+          id  :: pos_integer(),
+          ets :: undefined|pid()
          }).
 
 %% == public ==
 
 -spec start_link(pos_integer()) -> {ok, pid()}|{error, _}.
-start_link(BlockNo) ->
-    gen_server:start_link(?MODULE, [BlockNo], []).
+start_link(Id) ->
+    gen_server:start_link(?MODULE, [Id], []).
 
 %% -- behaviour: gen_server --
 
@@ -46,26 +45,26 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 %% == internal ==
 
-cleanup(#state{block_no=N, block_mgr=M}=X)
-  when M =/= undefined ->
-    catch true = baseline_ets:delete(M, N),
-    cleanup(X#state{block_mgr = undefined});
+cleanup(#state{id=I, ets=E}=X)
+  when E =/= undefined ->
+    catch true = baseline_ets:delete(E, I),
+    cleanup(X#state{ets = undefined});
 cleanup(_) ->
     baseline:flush().
 
-setup([BlockNo]) ->
+setup([Id]) ->
     false = process_flag(trap_exit, true),
-    loaded(#state{block_no = BlockNo}).
+    loaded(#state{id = Id}).
 
 
-loaded(#state{block_no=N}=X) ->
+loaded(#state{id=I}=X) ->
     case baseline_app:find(ndbepi_sup, ndbepi_block_mgr, 100, 1) of
         undefined ->
             {stop, not_found};
         Pid ->
-            try baseline_ets:insert_new(Pid, {N, self()}) of
+            try baseline_ets:insert_new(Pid, {I, self(), undefined}) of
                 true ->
-                    initialized(X#state{block_mgr = Pid});
+                    initialized(X#state{ets = Pid});
                 false ->
                     {stop, ebusy} % -> retry
             catch
@@ -82,8 +81,8 @@ initialized(State) ->
             initialized(hd(baseline_app:children(Pid)), State)
     end.
 
-initialized(Pid, #state{block_no=N}=X) ->
-    case get_table_by_name(Pid, <<"test/def/city">>, ndbepi_transporter:default(Pid, 3000), N) of
+initialized(Pid, #state{id=I}=X) ->
+    case get_table_by_name(Pid, <<"test/def/city">>, ndbepi_transporter:default(Pid, 3000), I) of
         {ok, Signal} ->
             error_logger:info_msg("~p~n", [Signal]),
             {ok, X};

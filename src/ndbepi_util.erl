@@ -222,7 +222,7 @@ sections_to_words([], _ByteOrder, N, List1, List2) ->
 sections_to_words([H|T], ByteOrder, N, List1, List2) ->
     L = case H of
             H when is_binary(H) ->
-                B = <<H/binary, 0, 0,0,0>>,
+                B = <<H/binary, 0, 0, 0, 0>>,
                 binary_to_words(B, 0, byte_size(B), ByteOrder)
         end,
     sections_to_words(T, ByteOrder, N + length(L), [length(L)|List1], [L|List2]).

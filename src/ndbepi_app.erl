@@ -37,12 +37,12 @@ stop(State) ->
 get_childspecs(Mgmepi) ->
     [
      {
-       ndbepi_block_mgr,
+       ndbepi_ets,
        {
          baseline_ets,
          start_link,
          [
-          ndbepi_block_mgr,
+          ndbepi_ets,
           [
            {read_concurrency, true}
           ]
