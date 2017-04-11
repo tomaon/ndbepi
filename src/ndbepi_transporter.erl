@@ -3,7 +3,7 @@
 -include("internal.hrl").
 
 -import(ndbepi_util, [binary_to_word/3, binary_to_words/4,
-                      pack/2, unpack/2]).
+                      pack/2, unpack/1]).
 
 %%
 %% ~/src/transporter/TCP_Transporter.cpp: TCP_Transporter::*
@@ -25,13 +25,14 @@
 -define(TCP_TRANSPORTER, $1).
 
 -record(state, {
-          interval    :: non_neg_integer(),
-          default     :: signal(),
-          ets         :: undefined|pid(),
-          tab         :: undefined|ets:tab(),
-          socket      :: undefined|gen_tcp:socket(),
-          regreq      :: undefined|binary(),
-          rest = <<>> :: binary()
+          local    :: node_id(),
+          remote   :: node_id(),
+          interval :: non_neg_integer(),
+          ets      :: undefined|pid(),
+          tab      :: undefined|ets:tab(),
+          socket   :: undefined|gen_tcp:socket(),
+          regreq   :: undefined|binary(),
+          rest     :: binary()
          }).
 
 %% == private ==
@@ -46,7 +47,7 @@ cast(Pid, Signal, Sections) ->
     gen_server:cast(Pid, {send, pack(Signal, Sections)}).
 
 
--spec deliver(pid(), binary(), signal()) -> signal().
+-spec deliver(pid(), binary(), signal()) -> {signal(), binary()}.
 deliver(Pid, Binary, #signal{byte_order=B, signal_id_included=1}=S) ->
     deliver(Pid, Binary, ?WORD(1), S#signal{signal_id = binary_to_word(Binary, 0, B)});
 deliver(Pid, Binary, Signal) ->
@@ -54,7 +55,7 @@ deliver(Pid, Binary, Signal) ->
 
 deliver(Pid, Binary, Start, #signal{byte_order=B, signal_data_length=L}=S) ->
     {D, R} = split_binary(Binary, Start + ?WORD(L)),
-    Pid ! S#signal{signal_data = binary_to_words(D, Start, ?WORD(L), B), sections = R}.
+    Pid ! {S#signal{signal_data = binary_to_words(D, Start, ?WORD(L), B)}, R}.
 
 %% -- behaviour: gen_server --
 
@@ -67,8 +68,8 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-handle_call(default, _From, #state{default=D}=X) ->
-    {reply, default(D), X}.
+handle_call(_Request, _From, State) ->
+    {stop, enosys, State}.
 
 handle_cast({send, Packet}, State) ->
     ready(Packet, State).
@@ -89,9 +90,9 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 %% == internal ==
 
-cleanup(#state{default=D, ets=E}=X)
+cleanup(#state{ets=E}=X)
   when E =/= undefined ->
-    catch true = baseline_ets:delete(E, D#signal.send_node_id),
+    catch true = baseline_ets:delete(E, X#state.remote),
     cleanup(X#state{ets = undefined});
 cleanup(#state{socket=S}=X)
   when S =/= undefined ->
@@ -105,30 +106,39 @@ setup(Args) ->
     {ok, Args, 300}.
 
 
-initialized([Interval, #signal{send_node_id=N}=D, Args]) ->
+initialized([Local, Remote, Interval, Default, Args]) ->
     case baseline_app:find(ndbepi_sup, ndbepi_ets, 100, 10) of
         undefined ->
             {stop, not_found, undefined};
         Pid ->
-            try baseline_ets:insert_new(Pid, {N, self(), D}) of
+            try baseline_ets:insert_new(Pid, {Remote, self(), Default}) of
                 true ->
-                    found(Args, #state{interval = Interval, default = D,
-                                       ets = Pid, tab = baseline_ets:tab(Pid)})
+                    found(Default, Args, #state{local = Local, remote = Remote,
+                                                interval = Interval, ets = Pid})
             catch
                 error:Reason ->
                     {stop, Reason, undefined}
             end
     end.
 
-found(Args, #state{socket=undefined}=X) ->
+found(Default, Args, #state{ets=E}=X) ->
+    try baseline_ets:tab(E) of
+        Tab ->
+            configured(Default, Args, X#state{tab = Tab})
+    catch
+        error:Reason ->
+            {stop, Reason, X}
+    end.
+
+configured(Default, Args, #state{socket=undefined}=X) ->
     case apply(gen_tcp, connect, Args) of
         {ok, Socket} ->
-            connected(binary:compile_pattern(<<?LS>>), X#state{socket = Socket});
+            connected(Default, binary:compile_pattern(<<?LS>>), X#state{socket = Socket});
         {error, Reason} ->
             {stop, Reason, X}
     end.
 
-connected(Pattern, #state{socket=S}=X) ->
+connected(Default, Pattern, #state{socket=S}=X) ->
     %%
     %% ~/src/common/transporter/TransporterRegistry.cpp: TransporterRegistry::start_service/1
     %% ~/src/common/util/SocketAuthenticator.cpp: SocketAuthSimple::client_authenticate/1
@@ -138,19 +148,19 @@ connected(Pattern, #state{socket=S}=X) ->
               <<"ok">>,
               Pattern, 3000) of
         ok ->
-            authorized(Pattern, X);
+            authorized(Default, Pattern, X);
         {error, Reason} ->
             {stop, Reason, X}
     end.
 
-authorized(Pattern, #state{default=D, socket=S}=X) -> % default:'recv' -> 'send'
+authorized(Default, Pattern, #state{local=L, remote=R, socket=S}=X) ->
     case call(S,
-              <<(integer_to_binary(D#signal.recv_node_id))/binary, " ", ?TCP_TRANSPORTER, ?LS>>,
-              <<(integer_to_binary(D#signal.send_node_id))/binary, " ", ?TCP_TRANSPORTER>>,
+              <<(integer_to_binary(L))/binary, " ", ?TCP_TRANSPORTER, ?LS>>,
+              <<(integer_to_binary(R))/binary, " ", ?TCP_TRANSPORTER>>,
               Pattern, 3000) of
         ok ->
             ok = inet:setopts(S, [{active, true}]),
-            {noreply, X#state{regreq = regreq(default(D))}, 0};
+            {noreply, X#state{regreq = regreq(L, Default), rest = <<>>}, 0};
         {error, Reason} ->
             {stop, Reason, X}
     end.
@@ -165,9 +175,9 @@ interrupted(#state{interval=I, socket=S, regreq=R}=X) ->
     end.
 
 
-received(Binary, #state{default=D}=X)
+received(Binary, State)
   when size(Binary) >= ?WORD(3) ->
-    received(Binary, unpack(binary_part(Binary, 0, ?WORD(3)), D), X);
+    received(Binary, unpack(Binary), State);
 received(Binary, #state{interval=I}=X) ->
     {noreply, X#state{rest = Binary}, I}.
 
@@ -179,12 +189,12 @@ received(Binary, _Signal, #state{interval=I}=X) ->
     {noreply, X#state{rest = Binary}, I}.
 
 accepted(Binary, #signal{checksum_included=0, message_length=M}=S, State) ->
-    checked(binary_part(Binary, {?WORD(3), ?WORD(M - 3)}), S, State);
+    checked(binary_part(Binary, ?WORD(3), ?WORD(M - 3)), S, State);
 accepted(Binary, #signal{checksum_included=1, message_length=M}=S, State) ->
-    {B, <<C:?WORD(1)/big-unit:8>>} = split_binary(Binary, ?WORD(M - 1)),
-    case mgmepi_util:checksum(B, ?WORD(M - 1), ?WORD(1)) of
+    C = binary_to_word(Binary, ?WORD(M - 1), 1),
+    case mgmepi_util:checksum(Binary, ?WORD(M - 1), ?WORD(1)) of
         C ->
-            checked(binary_part(B, {?WORD(3), ?WORD(M - 4)}), S, State)
+            checked(binary_part(Binary, ?WORD(3), ?WORD(M - 4)), S, State)
     end.
 
 checked(Binary, #signal{recv_block_no=B}=S, #state{tab=T, rest=R}=X) ->
@@ -194,7 +204,7 @@ checked(Binary, #signal{recv_block_no=B}=S, #state{tab=T, rest=R}=X) ->
             received(R, X#state{rest = <<>>})
     catch
         error:Reason ->
-            {stop, {Reason, S}, X}
+            {stop, Reason, X}
     end.
 
 
@@ -228,10 +238,7 @@ check(Binary, Pattern, Expected) ->
             {error, econnreset}
     end.
 
-default(#signal{send_node_id=S, recv_node_id=R}=X) -> % 'recv' -> 'send'
-    X#signal{send_node_id = R, recv_node_id = S}.
-
-regreq(#signal{send_node_id=N}=S) ->
+regreq(Local, #signal{}=S) ->
     %%
     %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegReq
     %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGREQ/2
@@ -242,7 +249,7 @@ regreq(#signal{send_node_id=N}=S) ->
            recv_block_no = ?QMGR,
            signal_data_length = 3,
            signal_data = [
-                          ?NUMBER_TO_REF(?API_CLUSTERMGR, N),
+                          ?NUMBER_TO_REF(?API_CLUSTERMGR, Local),
                           ?NDB_VERSION_ID,
                           ?MYSQL_VERSION_ID
                          ]

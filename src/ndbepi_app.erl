@@ -156,10 +156,10 @@ get_childspec(Local, Env, ByteOrder, Nodes, Connections) ->
         start_link,
         [
          [
+          Local,
+          Remote,
           get_value(?CFG_DB_API_HEARTBEAT_INTERVAL, Nodes, 1500),
-          #signal{ % for 'recv'
-             send_node_id       = Remote,
-             recv_node_id       = Local,
+          #signal{
              byte_order         = ByteOrder,
              signal_id_included = get_value(?CFG_CONNECTION_SEND_SIGNAL_ID, Connections, 0),
              checksum_included  = get_value(?CFG_CONNECTION_CHECKSUM, Connections, 0)

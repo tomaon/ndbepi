@@ -3,7 +3,7 @@
 -include("internal.hrl").
 
 %% -- private --
--export([pack/2, unpack/2]).
+-export([pack/2, unpack/1]).
 -export([binary_to_word/3, binary_to_words/4,
          word_to_binary/2, words_to_binary/2]).
 
@@ -149,8 +149,8 @@ pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
     %% checksum: 0 .. 1
     words_to_binary(case C of 0 -> L; 1 -> L ++ [mgmepi_util:checksum(L)] end, B).
 
--spec unpack(binary(), signal()) -> signal().
-unpack(Binary, #signal{}=S) ->
+-spec unpack(binary()) -> signal().
+unpack(Binary) ->
 
     <<W:?WORD(1)/big-unit:8>> = binary_part(Binary, 0, ?WORD(1)),
     ByteOrder = ?GET(W, ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1), % 1 or 3
@@ -159,7 +159,7 @@ unpack(Binary, #signal{}=S) ->
     W2 = binary_to_word(Binary, ?WORD(1), ByteOrder),
     W3 = binary_to_word(Binary, ?WORD(2), ByteOrder),
 
-    S#signal {
+    #signal {
       gsn =
           ?GET(W2, ?WORD2_SHIFT_GSN, ?WORD2_MASK_GSN),
       send_block_no =

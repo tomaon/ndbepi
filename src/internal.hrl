@@ -141,9 +141,7 @@
 -record(signal,
         {
           gsn                    :: undefined|1 .. ?MAX_GSN,
-          send_node_id           :: node_id(),                   % < mgmepi
           send_block_no          :: undefined|non_neg_integer(),
-          recv_node_id           :: node_id(),                   % < mgmepi
           recv_block_no          :: undefined|non_neg_integer(),
           byte_order             :: 0|1,                         % < mgmepi
           checksum_included      :: 0|1,                         % < mgmepi
@@ -155,10 +153,9 @@
           version_id = 0         :: non_neg_integer(),
           trace = 0              :: 0|1,
           signal_data_length = 0 :: non_neg_integer(),
-          signal_data = []       :: [integer()],                 % 0 .. 25
-          signal_id = 0          :: non_neg_integer(),
+          signal_data            :: undefined|[integer()],       % 0 .. 25
           sections_length = 0    :: non_neg_integer(),
-          sections = <<>>        :: binary()
+          signal_id = 0          :: non_neg_integer()
         }).
 
 %% == type ==

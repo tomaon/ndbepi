@@ -2,10 +2,6 @@
 
 -include("internal.hrl").
 
-%%
-%% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::trp_deliver_signal/2, ...
-%%
-
 %% -- private --
 -export([start_link/0]).
 
@@ -41,8 +37,8 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {stop, enosys, State}.
 
-handle_info(#signal{}=S, State) ->
-    received(S, State);
+handle_info({#signal{}=S, Binary}, State) ->
+    received(S, Binary, State);
 handle_info(timeout, Args) ->
     initialized(Args);
 handle_info({'EXIT', _Pid, Reason}, State) ->
@@ -67,57 +63,35 @@ initialized([]) ->
         undefined ->
             {stop, not_found, undefined};
         Pid ->
-            try baseline_ets:insert(Pid, {?API_CLUSTERMGR, self(), undefined}) of
+            try baseline_ets:insert_new(Pid, {?API_CLUSTERMGR, self(), undefined}) of
                 true ->
-                    {noreply, #state{ets = Pid}}
+                    found(#state{ets = Pid})
             catch
                 error:Reason ->
                     {stop, Reason, undefined}
             end
     end.
 
+found(State) ->
+    {noreply, State}.
 
-received(#signal{gsn=?GSN_API_REGCONF}, State) ->
+
+received(#signal{gsn=?GSN_API_REGCONF, sections_length=0}, <<>>, State) ->
     %%
     %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegConf
     %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGCONF/2
     %%
-    %% ApiRegConf
-    %% - qmgrRef               = 16515073   = {QMGR,1}
-    %% - version               = 460037     = 0x070505
-    %% - apiHeartbeatFrequency = 150 (1500/10)           % 100 =<, =< UINT_MAX32?
-    %% - mysql_version         = 329489     = 0x050711
-    %% - minDbVersion          = 460037     = 0x070505
-    %% - nodeState : NodeStatePOD
-    %% - - startLevel          = 3          = SL_STARTED
-    %% - - nodeGroup           = 0
-    %% - - masterNodeId?       = 4294967295 = 0xffffffff
-    %% - - ?                   = 16777217
-    %% - - ?                   = 1379017808
-    %% - - ?                   = 32767
-    %% - - singleUserMode      = 0
-    %% - - singleUserApi       = 4294967295 = 0xffffffff
-    %% - - m_connected_nodes : BitmaskPOD
-    %% - - - data[0]           = 18                      % 0x00000012 : 1,4
-    %% - - - data[1]           = 0
-    %% - - - data[2]           = 134217728               % 0x08000000 : 91
-    %% - - - data[3]           = 0
-    %% - - - data[4]           = 0
-    %% - - - data[5]           = 0
-    %% - - - data[6]           = 512                     % 0x00000200 : 201
-    %% - - - data[7]           = 0
     {noreply, State};
-received(#signal{gsn=?GSN_API_REGREF}=S, State) ->
+received(#signal{gsn=?GSN_API_REGREF, sections_length=0}=S, <<>>, State) ->
     %%
     %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegRef
     %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGREF/1
     %%
     Reason = case lists:nth(3, S#signal.signal_data) of % errorCode
                  1 -> <<"WrongType">>;
-                 2 -> <<"UnsupportedVersion">>;
-                 N -> N
+                 2 -> <<"UnsupportedVersion">>
              end,
     {stop, {shutdown, Reason}, State};
-received(Signal, State) ->
-    ok = error_logger:warning_msg("[~p:~p] s=~p~n", [?MODULE, self(), Signal]),
+received(Signal, Binary, State) ->
+    ok = error_logger:warning_msg("[~p:~p] ~p,~p~n", [?MODULE, self(), Signal, Binary]),
     {noreply, State}.
