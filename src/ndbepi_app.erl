@@ -98,6 +98,8 @@ get_childspecs(Env, NodeId, Config) ->
          ndbepi_cluster_mgr,
          start_link,
          [
+          NodeId,
+          ?API_CLUSTERMGR
          ]
        },
        transient,

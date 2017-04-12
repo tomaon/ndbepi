@@ -112,11 +112,6 @@
 
 -define(MAX_GSN,                          782).
 
-%% -- ~/include/transporter/TransporterDefinitions.h --
-
-%%efine(MAX_RECV_MESSAGE_BYTESIZE,      32768).
-%%efine(MAX_SEND_MESSAGE_BYTESIZE,      32768).
-
 %% -- other --
 
 -define(LS, $\n).

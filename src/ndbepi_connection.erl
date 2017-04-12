@@ -21,7 +21,7 @@
           fragments  :: undefined|map()
          }).
 
-%% == public ==
+%% == private ==
 
 -spec start_link(node_id(), pos_integer()) -> {ok, pid()}|{error, _}.
 start_link(NodeId, BlockNo) ->
@@ -29,7 +29,7 @@ start_link(NodeId, BlockNo) ->
 
 
 call(Pid) ->
-    gen_server:call(Pid, {get_table_by_name, <<"test/def/city">>}).
+    gen_server:call(Pid, {get_table_by_name, [<<"test/def/city">>], undefined}).
 
 %% -- behaviour: gen_server --
 
@@ -42,23 +42,14 @@ terminate(_Reason, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-handle_call(Request, From, #state{block_no=B, tab=T, request_id=R}=X) ->
-    try ets:select(T, [{{'$1', '_', '_'}, [{'<', '$1', ?MAX_NODES_ID}], ['$_']}]) of
-        [] ->
-            {stop, not_found, X};
-        List ->
-            ready(Request, lists:nth(1 + B rem length(List), List),
-                  X#state{request_id = R + 1, from = From})
-    catch
-        error:Reason ->
-            {error, Reason}
-    end.
+handle_call(Request, From, #state{request_id=R, from=undefined}=X) ->
+    ready(Request, X#state{request_id = R + 1, from = From}).
 
 handle_cast(_Request, State) ->
     {stop, enosys, State}.
 
-handle_info({#signal{fragment_info=0}=S, Binary}, State) ->
-    received(S, Binary, State);
+handle_info({#signal{fragment_info=0}=S, Binary}, #state{}=X) ->
+    received(S, Binary, X);
 handle_info({#signal{fragment_info=1}=S, Binary}, #state{fragments=F}=X) ->
     {noreply, X#state{fragments = append_fragments(fragment_id(S), Binary, F)}};
 handle_info({#signal{fragment_info=3}=S, Binary}, #state{fragments=F}=X) ->
@@ -78,60 +69,89 @@ cleanup(_) ->
 
 setup([NodeId, BlockNo]) ->
     false = process_flag(trap_exit, true),
-    initialized(#state{node_id = NodeId, block_no = BlockNo, request_id = 0}).
+    loaded(#state{node_id = NodeId, block_no = BlockNo, request_id = 0}).
 
 
-initialized(#state{block_no=B}=X) ->
+loaded(#state{}=X) ->
     case baseline_app:find(ndbepi_sup, ndbepi_ets, 100, 1) of
         undefined ->
             {stop, not_found};
         Pid ->
-            try baseline_ets:insert_new(Pid, {B, self(), undefined}) of
-                true ->
-                    found(X#state{ets = Pid});
-                false ->
-                    {stop, ebusy} % -> retry
-            catch
-                error:Reason ->
-                    {stop, Reason}
-            end
+            found(X#state{ets = Pid})
     end.
 
-found(#state{ets=E}=X) ->
-    try baseline_ets:tab(E) of
-        Tab ->
-            configured(X#state{tab = Tab})
-    catch
-        error:Reason ->
-            {stop, Reason, X}
+found(#state{block_no=B, ets=E}=X) ->
+    case baseline_ets:insert_new(E, {B, self(), undefined}) of
+        true ->
+            configured(X#state{tab = baseline_ets:tab(E)});
+        false ->
+            {stop, ebusy} % -> retry
     end.
 
 configured(State) ->
     {ok, State}.
 
 
-ready({get_table_by_name, Name}, V, #state{}=X) ->
+ready({_, S, Z}=A, #state{node_id=N, block_no=B, request_id=R, tab=T}=X) ->
+    try select(T, Z, B) of
+        {_, P, D} ->
+            ok = ndbepi_transporter:cast(P, signal(A, N, B, R, D), S),
+            {noreply, X}
+    catch
+        error:Reason ->
+            {stop, Reason, X}
+    end.
+
+
+select(Tab, undefined, Seed) ->
+    case ets:select(Tab, [{{'$1', '_', '_'}, [{'<', '$1', ?MAX_NODES_ID}], ['$_']}]) of
+        [] ->
+            error(badarg);
+        List ->
+            lists:nth(1 + Seed rem length(List), List)
+    end;
+select(Tab, NodeId, BlockNo) ->
+    case ets:select(Tab, [{{'$1', '_', '_'}, [{'=', '$1', NodeId}], ['$_']}]) of
+        [] ->
+            select(Tab, undefined, BlockNo);
+        List ->
+            hd(List)
+    end.
+
+signal({get_table_by_id, [Id], _}, NodeId, BlockNo, RequestId, Default) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp
     %%
-    N = X#state.node_id,
-    B = X#state.block_no,
-    R = X#state.request_id,
-    {_, P, D} = V,
-    ok = ndbepi_transporter:cast(P, D#signal{gsn = ?GSN_GET_TABINFOREQ,
-                                             send_block_no = B,
-                                             recv_block_no = ?DBDICT,
-                                             signal_data_length = 5,
-                                             signal_data = [
-                                                            R,                    % senderData
-                                                            ?NUMBER_TO_REF(B, N), % senderRef
-                                                            3,                    % requestType
-                                                            byte_size(Name) + 1,  % tableNameLen
-                                                            0                     % schemaTransId
-                                                           ],
-                                             sections_length = 1
-                                            }, [ Name ]),
-    {noreply, X}.
+    Default#signal{gsn = ?GSN_GET_TABINFOREQ,
+                   send_block_no = BlockNo,
+                   recv_block_no = ?DBDICT,
+                   signal_data_length = 5,
+                   signal_data = [
+                                  RequestId,
+                                  ?NUMBER_TO_REF(BlockNo, NodeId),
+                                  2, % 0(=RequestById) + 2(=LongSignalConf)
+                                  Id,
+                                  0  % TODO
+                                 ],
+                   sections_length = 0
+                  };
+signal({get_table_by_name, [Name], _}, NodeId, BlockNo, RequestId, Default) ->
+    %%
+    %% ~/include/kernel/signaldata/GetTabInfo.hpp
+    %%
+    Default#signal{gsn = ?GSN_GET_TABINFOREQ,
+                   send_block_no = BlockNo,
+                   recv_block_no = ?DBDICT,
+                   signal_data_length = 5,
+                   signal_data = [
+                                  RequestId,
+                                  ?NUMBER_TO_REF(BlockNo, NodeId),
+                                  3, % 1(=RequestByName) + 2(=LongSignalConf)
+                                  size(Name) + 1,
+                                  0
+                                 ],
+                   sections_length = 1
+                  }.
 
 %% ndbepi_connection:call(element(2, ndbepi:connect())).
 

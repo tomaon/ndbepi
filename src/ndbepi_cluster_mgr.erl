@@ -3,7 +3,7 @@
 -include("internal.hrl").
 
 %% -- private --
--export([start_link/0]).
+-export([start_link/2]).
 
 -behaviour(gen_server).
 -export([init/1, terminate/2, code_change/3,
@@ -11,14 +11,16 @@
 
 %% -- internal --
 -record(state, {
-          ets :: undefined|pid()
+          node_id  :: node_id(),
+          block_no :: pos_integer(),
+          ets      :: undefined|pid()
          }).
 
-%% == public ==
+%% == private ==
 
--spec start_link() -> {ok, pid()}|{error, _}.
-start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+-spec start_link(node_id(), pos_integer()) -> {ok, pid()}|{error, _}.
+start_link(NodeId, BlockNo) ->
+    gen_server:start_link(?MODULE, [NodeId, BlockNo], []).
 
 %% -- behaviour: gen_server --
 
@@ -37,8 +39,8 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {stop, enosys, State}.
 
-handle_info({#signal{}=S, Binary}, State) ->
-    received(S, Binary, State);
+handle_info({#signal{}=S, Binary}, #state{}=X) ->
+    received(S, Binary, X);
 handle_info(timeout, Args) ->
     initialized(Args);
 handle_info({'EXIT', _Pid, Reason}, State) ->
@@ -48,7 +50,7 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 
 cleanup(#state{ets=E}=X)
   when E =/= undefined ->
-    catch true = baseline_ets:delete(E, ?API_CLUSTERMGR),
+    catch true = baseline_ets:delete(E, X#state.block_no),
     cleanup(X#state{ets = undefined});
 cleanup(_) ->
     baseline:flush().
@@ -58,36 +60,36 @@ setup(Args) ->
     {ok, Args, 0}.
 
 
-initialized([]) ->
+initialized([NodeId, BlockNo]) ->
     case baseline_app:find(ndbepi_sup, ndbepi_ets, 100, 10) of
         undefined ->
             {stop, not_found, undefined};
         Pid ->
-            try baseline_ets:insert_new(Pid, {?API_CLUSTERMGR, self(), undefined}) of
-                true ->
-                    found(#state{ets = Pid})
-            catch
-                error:Reason ->
-                    {stop, Reason, undefined}
-            end
+            found(#state{node_id = NodeId, block_no = BlockNo, ets = Pid})
     end.
 
-found(State) ->
+found(#state{block_no=B, ets=E}=X) ->
+    case baseline_ets:insert_new(E, {B, self()}) of
+        true ->
+            configured(X)
+    end.
+
+configured(State) ->
     {noreply, State}.
 
 
-received(#signal{gsn=?GSN_API_REGCONF, sections_length=0}, <<>>, State) ->
+received(#signal{gsn=?GSN_API_REGCONF}, <<>>, State) ->
     %%
     %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegConf
     %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGCONF/2
     %%
     {noreply, State};
-received(#signal{gsn=?GSN_API_REGREF, sections_length=0}=S, <<>>, State) ->
+received(#signal{gsn=?GSN_API_REGREF}=S, <<>>, State) ->
     %%
     %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegRef
     %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGREF/1
     %%
-    Reason = case lists:nth(3, S#signal.signal_data) of % errorCode
+    Reason = case lists:nth(3, S#signal.signal_data) of
                  1 -> <<"WrongType">>;
                  2 -> <<"UnsupportedVersion">>
              end,
