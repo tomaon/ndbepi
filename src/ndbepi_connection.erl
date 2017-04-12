@@ -81,7 +81,7 @@ loaded(#state{}=X) ->
     end.
 
 found(#state{block_no=B, ets=E}=X) ->
-    case baseline_ets:insert_new(E, {B, self(), undefined}) of
+    case baseline_ets:insert_new(E, {B, self()}) of
         true ->
             configured(X#state{tab = baseline_ets:tab(E)});
         false ->
@@ -104,7 +104,7 @@ ready({_, S, Z}=A, #state{node_id=N, block_no=B, request_id=R, tab=T}=X) ->
 
 
 select(Tab, undefined, Seed) ->
-    case ets:select(Tab, [{{'$1', '_', '_'}, [{'<', '$1', ?MAX_NODES_ID}], ['$_']}]) of
+    case ets:select(Tab, [{{'$1', '_', '_'}, [], ['$_']}]) of
         [] ->
             error(badarg);
         List ->
@@ -147,11 +147,23 @@ signal({get_table_by_name, [Name], _}, NodeId, BlockNo, RequestId, Default) ->
                                   RequestId,
                                   ?NUMBER_TO_REF(BlockNo, NodeId),
                                   3, % 1(=RequestByName) + 2(=LongSignalConf)
-                                  size(Name) + 1,
+                                  size(Name) + 1, % NULL terminated
                                   0
                                  ],
                    sections_length = 1
                   }.
+
+%% 52,15,0,20, 24,0,0,4, 1,128,250,0,
+%% 0,0,0,0,
+%% 1,0,0,0,
+%% 201,0,1,128,
+%% 3,0,0,0,
+%% 14,0,0,0,
+%% 0,0,0,0,
+
+%% 4,0,0,0, 116,101,115,116, 47,100,101,102, 47,99,105,116, 121,0,0,0,
+
+%% 225,237,132,246
 
 %% ndbepi_connection:call(element(2, ndbepi:connect())).
 

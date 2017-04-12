@@ -3,7 +3,7 @@
 -include("internal.hrl").
 
 -import(ndbepi_util, [binary_to_word/3, binary_to_words/4,
-                      sections_to_words/2, words_to_binary/2]).
+                      word_to_binary/2, words_to_binary/2]).
 
 %%
 %% TODO: PACKED, SECTION, TRACE, MAX_SEND_MESSAGE_BYTESIZE
@@ -20,21 +20,36 @@
 
 %% -- internal --
 
-%%  b : Byte order        ,  1 * 3(4?, TODO) = 1(big), 0(little)
+%% -- ~/include/kernel/ndb_limits.h --
+-define(NDB_SECTION_SEGMENT_SZ, 60).
+
+%% -- ~/include/transporter/TransporterDefinitions.hpp --
+-define(MAX_RECV_MESSAGE_BYTESIZE, 32768).
+-define(MAX_SEND_MESSAGE_BYTESIZE, 32768).
+
+%% enum TransporterType
+-define(TCP_TRANSPORTER, $1).
+
+%% -- ~/include/transporter/TransporterFacade.cpp --
+-define(CHUNK_SZ, ((?MAX_SEND_MESSAGE_BYTESIZE bsl 2) div ?NDB_SECTION_SEGMENT_SZ - 2 ) * ?NDB_SECTION_SEGMENT_SZ).
+
+%% -- ~/src/common/transporter/TransporterInternalDefinitions.hpp --
+
+%%  b : Byte order        ,  1 * 3
 %%  c : Checksum included ,  1
 %%  d : Signal data length,  5
-%%  f : FragmentInfo1     ,  1 (FragmentInfo & 2)
+%%  f : FragmentInfo1     ,  1
 %%  g : GSN               , 16
-%%  h : FragmentInfo2     ,  1 (FragmentInfo & 1)
+%%  h : FragmentInfo2     ,  1
 %%  i : Signal id included,  1
 %%  m : Message length    , 16
 %%  n : No of segments    ,  2
-%%  p : Prio              ,  2 = 1(JBB)
+%%  p : Prio              ,  2
 %%  r : Recievers block no, 16
 %%  s : Senders block no  , 16
 %%  t : Trace             ,  6
 %%  v : Version id        ,  4
-%% (z): Compression       ,  1 = 0
+%% (z): Compression       ,  1
 %%
 %% Protocol6  3          2          1          0
 %%           10987654 32109876 54321098 76543210
@@ -45,14 +60,6 @@
 %% - Word3 - rrrrrrrr rrrrrrrr ssssssss ssssssss
 %%           00000000 00000000 00000000 00000000  0x00000000
 
-%% -- ~/include/transporter/TransporterDefinitions.hpp --
--define(MAX_RECV_MESSAGE_BYTESIZE, 32768).
-%%efine(MAX_SEND_MESSAGE_BYTESIZE, 32768).
-
-%% enum TransporterType
--define(TCP_TRANSPORTER, $1).
-
-%% -- ~/src/common/transporter/TransporterInternalDefinitions.hpp --
 -define(WORD1_MASK_BYTE_ORDER_1,        16#00000001).
 -define(WORD1_MASK_FRAGMENT_INFO_1,     16#00000002).
 -define(WORD1_MASK_SIGNAL_ID_INCLUDED,  16#00000004).
@@ -120,6 +127,10 @@ start_link(Args, Options) ->
 
 -spec cast(pid(), signal(), [term()]) -> ok.
 cast(Pid, Signal, Sections) ->
+    cast(Pid, Signal, Sections, size_of(Sections)).
+
+cast(Pid, Signal, Sections, Size)
+  when Size =< ?CHUNK_SZ ->
     gen_server:cast(Pid, {send, pack(Signal, Sections)}).
 
 
@@ -310,6 +321,20 @@ check(Binary, Pattern, Expected) ->
             {error, econnreset}
     end.
 
+sections_to_words(Sections, _ByteOrder) ->
+    F = fun (E, {N, L1, L2}) when is_binary(E) ->
+                W = binary_to_words(<<E/binary, 0, 0, 0, 0>>, 0, size(E) + 4, 1),
+                L = length(W),
+                {N + L, [L|L1], [W|L2]}
+        end,
+    lists:foldl(F, {0, [], []}, Sections).
+
+size_of(Sections) ->
+    F = fun (E, A) when is_binary(E) ->
+                A + ((size(E) + 3) bsl 2)
+        end,
+    lists:foldl(F, 0, Sections).
+
 regreq(Local, #signal{}=S) ->
     %%
     %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegReq
@@ -327,15 +352,19 @@ regreq(Local, #signal{}=S) ->
                          ]
           }, []).
 
+word(Tuple, List) ->
+    lists:foldl(fun({N, S, M}, A) -> A bor ((element(N, Tuple) bsl S) band M) end, 0, List).
+
 
 pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
              signal_data_length=D, sections_length=N}=S, Sections) ->
 
-    {SN, SL} = case N of 0 -> {0, []}; _ -> sections_to_words(Sections, B) end,
+    {SN, SL1, SL2} = case N of 0 -> {0, [], []}; _ -> sections_to_words(Sections, B) end,
+
     T = S#signal{message_length = 3 + C + I + D + N + SN},
 
     L = lists:flatten([
-                       %% header: 3
+                       %% header
                        word(T, [
                                 {#signal.byte_order,
                                  ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1},
@@ -378,16 +407,23 @@ pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
                                 {#signal.recv_block_no,
                                  ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO}
                                ]),
-                       %% signal_id: 0 .. 1
+                       %% signal_id
                        case I of 0 -> []; 1 -> T#signal.signal_id end,
-                       %% signal_data: 0 .. 25
+                       %% signal_data
                        case D of 0 -> []; _ -> T#signal.signal_data end,
-                       %% sections: 0 .. 3
-                       SL
+                       %% sections
+                       SL1, SL2
                       ]),
 
-    %% checksum: 0 .. 1
-    words_to_binary(case C of 0 -> L; 1 -> L ++ [mgmepi_util:checksum(L)] end, B).
+    %% checksum
+    case C of
+        0 ->
+            words_to_binary(L, B);
+        1 ->
+            B1 = words_to_binary(L, B),
+            B2 = word_to_binary(mgmepi_util:checksum(B1, size(B1), ?WORD(1), big), 1),
+            <<B1/binary, B2/binary>>
+    end.
 
 unpack(Binary) ->
 
@@ -430,6 +466,3 @@ unpack(Binary) ->
        sections_length =
            ?GET(W2, ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS)
       }.
-
-word(Tuple, List) ->
-    lists:foldl(fun({N, S, M}, A) -> A bor ((element(N, Tuple) bsl S) band M) end, 0, List).
