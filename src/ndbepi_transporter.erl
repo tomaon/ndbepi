@@ -2,10 +2,10 @@
 
 -include("internal.hrl").
 
--import(ndbepi_util, [endianness/1,  binary_to_words/4, words_to_binary/2]).
+-import(ndbepi_util, [endianness/1,  words_to_binary/2]).
 
 %%
-%% TODO: PACKED, SECTION, TRACE, MAX_SEND_MESSAGE_BYTESIZE
+%% TODO: PACKED, TRACE, MAX_SEND_MESSAGE_BYTESIZE
 %%
 
 %% -- private --
@@ -320,11 +320,16 @@ check(Binary, Pattern, Expected) ->
             {error, econnreset}
     end.
 
-sections_to_words(Sections, ByteOrder) -> % TODO
-    F = fun (E, {N, L1, L2}) when is_binary(E) ->
-                W = binary_to_words(<<E/binary, 0, 0, 0, 0>>, 0, size(E) + 4, ByteOrder),
-                L = length(W),
-                {N + L, [L|L1], [W|L2]}
+sections_to_words(Sections, _ByteOrder) -> % TODO
+    F = fun (E, {N, AL, AB}) when is_binary(E) ->
+                B = case (size(E) + 1) rem 4 of
+                        0 ->
+                            <<E/binary, 0>>;
+                        W ->
+                            <<E/binary, 0:(4-W)/unit:8>>
+                    end,
+                L = length(B),
+                {N + L, [L|AL],  <<AB/binary, B/binary>>}
         end,
     lists:foldl(F, {0, [], []}, Sections).
 
@@ -358,11 +363,11 @@ word(Tuple, List) ->
 pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
              signal_data_length=D, sections_length=N}=S, Sections) ->
 
-    {SN, SL1, SL2} = case N of 0 -> {0, [], []}; _ -> sections_to_words(Sections, B) end,
+    {SN, SL, SB} = case N of 0 -> {0, [], <<>>}; _ -> sections_to_words(Sections, B) end,
 
     T = S#signal{message_length = 3 + C + I + D + N + SN},
 
-    L = lists:flatten([
+    L = [
          %% header
          word(T, [
                   {#signal.byte_order,
@@ -410,12 +415,23 @@ pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
          case I of 0 -> []; 1 -> T#signal.signal_id end,
          %% signal_data
          case D of 0 -> []; _ -> T#signal.signal_data end,
-         %% sections
-         SL1, SL2
-        ]),
+         %% sections (length)
+         SL
+        ],
+
+    B1 = words_to_binary(lists:flatten(L), B),
+    B2 = <<B1/binary, SB/binary>>,
 
     %% checksum
-    words_to_binary(case C of 0 -> L; 1 -> L ++ [mgmepi_util:checksum(L)] end, B).
+    case C of
+        0 ->
+            B2;
+        1 ->
+            C3 = mgmepi_util:checksum(B2, 0, size(B2), ?WORD(1), native),
+            B3 = baseline_binary:encode_unsigned(C3, ?WORD(1), endianness(B)),
+            <<B2/binary, B3/binary>>
+
+    end.
 
 unpack(Binary) ->
 
