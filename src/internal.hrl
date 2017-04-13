@@ -148,7 +148,7 @@
           version_id = 0         :: non_neg_integer(),
           trace = 0              :: 0|1,
           signal_data_length = 0 :: non_neg_integer(),
-          signal_data            :: undefined|[integer()],       % 0 .. 25
+          signal_data = []       :: [integer()],
           sections_length = 0    :: non_neg_integer(),
           signal_id = 0          :: non_neg_integer()
         }).

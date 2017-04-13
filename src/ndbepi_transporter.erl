@@ -2,8 +2,7 @@
 
 -include("internal.hrl").
 
--import(ndbepi_util, [binary_to_word/3, binary_to_words/4,
-                      word_to_binary/2, words_to_binary/2]).
+-import(ndbepi_util, [endianness/1,  binary_to_words/4, words_to_binary/2]).
 
 %%
 %% TODO: PACKED, SECTION, TRACE, MAX_SEND_MESSAGE_BYTESIZE
@@ -105,8 +104,6 @@
 %% -- other --
 -define(GET(Word, Shift, Mask), ((Word band Mask) bsr Shift)).
 
--define(MAX_RECV_MESSAGE_WORDSIZE, (?MAX_RECV_MESSAGE_BYTESIZE div ?WORD(1))).
-
 -record(state, {
           local       :: node_id(),
           remote      :: node_id(),
@@ -129,20 +126,22 @@ start_link(Args, Options) ->
 cast(Pid, Signal, Sections) ->
     cast(Pid, Signal, Sections, size_of(Sections)).
 
-cast(Pid, Signal, Sections, Size)
+cast(Pid, Signal, Sections, Size) % TODO
   when Size =< ?CHUNK_SZ ->
     gen_server:cast(Pid, {send, pack(Signal, Sections)}).
 
 
 -spec deliver(pid(), binary(), signal()) -> {signal(), binary()}.
+deliver(Pid, Binary, #signal{signal_id_included=0}=S) ->
+    deliver(Pid, Binary, 0, S);
 deliver(Pid, Binary, #signal{byte_order=B, signal_id_included=1}=S) ->
-    deliver(Pid, Binary, ?WORD(1), S#signal{signal_id = binary_to_word(Binary, 0, B)});
-deliver(Pid, Binary, Signal) ->
-    deliver(Pid, Binary, 0, Signal).
+    I = baseline_binary:decode_unsigned(Binary, 0, ?WORD(1), endianness(B)),
+    deliver(Pid, Binary, ?WORD(1), S#signal{signal_id = I}).
 
 deliver(Pid, Binary, Start, #signal{byte_order=B, signal_data_length=L}=S) ->
-    {D, R} = split_binary(Binary, Start + ?WORD(L)),
-    Pid ! {S#signal{signal_data = binary_to_words(D, Start, ?WORD(L), B)}, R}.
+    {H, T} = split_binary(Binary, Start + ?WORD(L)),
+    D = baseline_binary:decode_unsigned(H, Start, ?WORD(L), endianness(B), ?WORD(1)),
+    Pid ! {S#signal{signal_data = D}, T}.
 
 %% -- behaviour: gen_server --
 
@@ -275,7 +274,7 @@ received(Binary, #state{interval=I}=X) ->
     {noreply, X#state{rest = Binary}, I}.
 
 received(_Binary, #signal{message_length=M}, State)
-  when M =:= 0; M > ?MAX_RECV_MESSAGE_WORDSIZE ->
+  when M =:= 0; M > ?MAX_RECV_MESSAGE_BYTESIZE div ?WORD(1) ->
     {stop, ebadmsg, State};
 received(Binary, #signal{message_length=M}=S, #state{}=X)
   when size(Binary) >= ?WORD(M) ->
@@ -287,8 +286,8 @@ received(Binary, _Signal, #state{interval=I}=X) ->
 accepted(Binary, #signal{checksum_included=0, message_length=M}=S, State) ->
     checked(binary_part(Binary, ?WORD(3), ?WORD(M - 3)), S, State);
 accepted(Binary, #signal{checksum_included=1, message_length=M}=S, State) ->
-    C = binary_to_word(Binary, ?WORD(M - 1), 1), % 1=big
-    case mgmepi_util:checksum(Binary, ?WORD(M - 1), ?WORD(1), big) of
+    C = baseline_binary:decode_unsigned(Binary, ?WORD(M - 1), ?WORD(1), native),
+    case mgmepi_util:checksum(Binary, 0, ?WORD(M - 1), ?WORD(1), native) of
         C ->
             checked(binary_part(Binary, ?WORD(3), ?WORD(M - 4)), S, State);
         _ ->
@@ -321,15 +320,15 @@ check(Binary, Pattern, Expected) ->
             {error, econnreset}
     end.
 
-sections_to_words(Sections, _ByteOrder) ->
+sections_to_words(Sections, ByteOrder) -> % TODO
     F = fun (E, {N, L1, L2}) when is_binary(E) ->
-                W = binary_to_words(<<E/binary, 0, 0, 0, 0>>, 0, size(E) + 4, 1),
+                W = binary_to_words(<<E/binary, 0, 0, 0, 0>>, 0, size(E) + 4, ByteOrder),
                 L = length(W),
                 {N + L, [L|L1], [W|L2]}
         end,
     lists:foldl(F, {0, [], []}, Sections).
 
-size_of(Sections) ->
+size_of(Sections) -> % TODO
     F = fun (E, A) when is_binary(E) ->
                 A + ((size(E) + 3) bsl 2)
         end,
@@ -364,75 +363,70 @@ pack(#signal{byte_order=B, checksum_included=C, signal_id_included=I,
     T = S#signal{message_length = 3 + C + I + D + N + SN},
 
     L = lists:flatten([
-                       %% header
-                       word(T, [
-                                {#signal.byte_order,
-                                 ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1},
-                                {#signal.fragment_info,
-                                 ?WORD1_SHIFT_FRAGMENT_INFO_1, ?WORD1_MASK_FRAGMENT_INFO_1},
-                                {#signal.signal_id_included,
-                                 ?WORD1_SHIFT_SIGNAL_ID_INCLUDED, ?WORD1_MASK_SIGNAL_ID_INCLUDED},
-                                {#signal.compressed,
-                                 ?WORD1_SHIFT_COMPRESSED, ?WORD1_MASK_COMPRESSED},
-                                {#signal.checksum_included,
-                                 ?WORD1_SHIFT_CHECKSUM_INCLUDED, ?WORD1_MASK_CHECKSUM_INCLUDED},
-                                {#signal.prio,
-                                 ?WORD1_SHIFT_PRIO, ?WORD1_MASK_PRIO},
-                                {#signal.byte_order,
-                                 ?WORD1_SHIFT_BYTE_ORDER_2, ?WORD1_MASK_BYTE_ORDER_2},
-                                {#signal.message_length,
-                                 ?WORD1_SHIFT_MESSAGE_LENGTH, ?WORD1_MASK_MESSAGE_LENGTH},
-                                {#signal.byte_order,
-                                 ?WORD1_SHIFT_BYTE_ORDER_3, ?WORD1_MASK_BYTE_ORDER_3},
-                                {#signal.fragment_info,
-                                 ?WORD1_SHIFT_FRAGMENT_INFO_2, ?WORD1_MASK_FRAGMENT_INFO_2},
-                                {#signal.signal_data_length,
-                                 ?WORD1_SHIFT_SIGNAL_DATA_LENGTH, ?WORD1_MASK_SIGNAL_DATA_LENGTH},
-                                {#signal.byte_order,
-                                 ?WORD1_SHIFT_BYTE_ORDER_4, ?WORD1_MASK_BYTE_ORDER_4}
-                               ]),
-                       word(T, [
-                                {#signal.gsn,
-                                 ?WORD2_SHIFT_GSN, ?WORD2_MASK_GSN},
-                                {#signal.version_id,
-                                 ?WORD2_SHIFT_VERSION_ID, ?WORD2_MASK_VERSION_ID},
-                                {#signal.trace,
-                                 ?WORD2_SHIFT_TRACE, ?WORD2_MASK_TRACE},
-                                {#signal.sections_length,
-                                 ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS}
-                               ]),
-                       word(T, [
-                                {#signal.send_block_no,
-                                 ?WORD3_SHIFT_SEND_BLOCK_NO, ?WORD3_MASK_SEND_BLOCK_NO},
-                                {#signal.recv_block_no,
-                                 ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO}
-                               ]),
-                       %% signal_id
-                       case I of 0 -> []; 1 -> T#signal.signal_id end,
-                       %% signal_data
-                       case D of 0 -> []; _ -> T#signal.signal_data end,
-                       %% sections
-                       SL1, SL2
-                      ]),
+         %% header
+         word(T, [
+                  {#signal.byte_order,
+                   ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1},
+                  {#signal.fragment_info,
+                   ?WORD1_SHIFT_FRAGMENT_INFO_1, ?WORD1_MASK_FRAGMENT_INFO_1},
+                  {#signal.signal_id_included,
+                   ?WORD1_SHIFT_SIGNAL_ID_INCLUDED, ?WORD1_MASK_SIGNAL_ID_INCLUDED},
+                  {#signal.compressed,
+                   ?WORD1_SHIFT_COMPRESSED, ?WORD1_MASK_COMPRESSED},
+                  {#signal.checksum_included,
+                   ?WORD1_SHIFT_CHECKSUM_INCLUDED, ?WORD1_MASK_CHECKSUM_INCLUDED},
+                  {#signal.prio,
+                   ?WORD1_SHIFT_PRIO, ?WORD1_MASK_PRIO},
+                  {#signal.byte_order,
+                   ?WORD1_SHIFT_BYTE_ORDER_2, ?WORD1_MASK_BYTE_ORDER_2},
+                  {#signal.message_length,
+                   ?WORD1_SHIFT_MESSAGE_LENGTH, ?WORD1_MASK_MESSAGE_LENGTH},
+                  {#signal.byte_order,
+                   ?WORD1_SHIFT_BYTE_ORDER_3, ?WORD1_MASK_BYTE_ORDER_3},
+                  {#signal.fragment_info,
+                   ?WORD1_SHIFT_FRAGMENT_INFO_2, ?WORD1_MASK_FRAGMENT_INFO_2},
+                  {#signal.signal_data_length,
+                   ?WORD1_SHIFT_SIGNAL_DATA_LENGTH, ?WORD1_MASK_SIGNAL_DATA_LENGTH},
+                  {#signal.byte_order,
+                   ?WORD1_SHIFT_BYTE_ORDER_4, ?WORD1_MASK_BYTE_ORDER_4}
+                 ]),
+         word(T, [
+                  {#signal.gsn,
+                   ?WORD2_SHIFT_GSN, ?WORD2_MASK_GSN},
+                  {#signal.version_id,
+                   ?WORD2_SHIFT_VERSION_ID, ?WORD2_MASK_VERSION_ID},
+                  {#signal.trace,
+                   ?WORD2_SHIFT_TRACE, ?WORD2_MASK_TRACE},
+                  {#signal.sections_length,
+                   ?WORD2_SHIFT_NO_OF_SECTIONS, ?WORD2_MASK_NO_OF_SECTIONS}
+                 ]),
+         word(T, [
+                  {#signal.send_block_no,
+                   ?WORD3_SHIFT_SEND_BLOCK_NO, ?WORD3_MASK_SEND_BLOCK_NO},
+                  {#signal.recv_block_no,
+                   ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO}
+                 ]),
+         %% signal_id
+         case I of 0 -> []; 1 -> T#signal.signal_id end,
+         %% signal_data
+         case D of 0 -> []; _ -> T#signal.signal_data end,
+         %% sections
+         SL1, SL2
+        ]),
 
     %% checksum
-    case C of
-        0 ->
-            words_to_binary(L, B);
-        1 ->
-            B1 = words_to_binary(L, B),
-            B2 = word_to_binary(mgmepi_util:checksum(B1, size(B1), ?WORD(1), big), 1),
-            <<B1/binary, B2/binary>>
-    end.
+    words_to_binary(case C of 0 -> L; 1 -> L ++ [mgmepi_util:checksum(L)] end, B).
 
 unpack(Binary) ->
 
-    <<W:?WORD(1)/big-unit:8>> = binary_part(Binary, 0, ?WORD(1)),
-    ByteOrder = ?GET(W, ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1), % 1 or 3
+    B = ?GET(baseline_binary:decode_unsigned(Binary, ?WORD(0), ?WORD(1), native),
+             ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1), % 1 or 3
 
-    W1 = binary_to_word(Binary, ?WORD(0), ByteOrder),
-    W2 = binary_to_word(Binary, ?WORD(1), ByteOrder),
-    W3 = binary_to_word(Binary, ?WORD(2), ByteOrder),
+    E = endianness(B),
+
+    W1 = baseline_binary:decode_unsigned(Binary, ?WORD(0), ?WORD(1), E),
+    W2 = baseline_binary:decode_unsigned(Binary, ?WORD(1), ?WORD(1), E),
+    W3 = baseline_binary:decode_unsigned(Binary, ?WORD(2), ?WORD(1), E),
 
     #signal {
        gsn =
@@ -442,7 +436,7 @@ unpack(Binary) ->
        recv_block_no =
            ?GET(W3, ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO),
        byte_order =
-           ByteOrder,
+           B,
        checksum_included =
            ?GET(W1, ?WORD1_SHIFT_CHECKSUM_INCLUDED, ?WORD1_MASK_CHECKSUM_INCLUDED),
        signal_id_included =
