@@ -28,34 +28,29 @@
 %%
 
 %% -- ~/include/kernel/BlockNumbers.h --
-
-%%efine(BACKUP,  16#00f4). % 243: online BACKUPs and checkpoints
-%%efine(DBTC,    16#00f5). % 245: Transaction Coordinator
-%%efine(DBDIH,   16#00f6). % 246: DIstribution Handler, local and global checkpoints
-%%efine(DBLQH,   16#00f7). % 247: Local Query Handler, coordinator of 2-phase commits
-%%efine(DBACC,   16#00f8). % 248: ACCess control and lock management
-%%efine(DBTUP,   16#00f9). % 249: TUPle manager, physical storage
--define(DBDICT,  16#00fa). % 250: data DICTionary
-%%efine(DBCNTR,  16#00fb). % 251: startup CoordiNaToR, initialisation and configuration
--define(QMGR,    16#00fc). % 252: Queue ManaGeR
-%%efine(NDBFS,   16#00fd). % 253: NDB File System abstraction layer
-%%efine(CMVMI,   16#00fe). % 254: Cluster Manager Virtual Machine Interface
-%%efine(TRIX,    16#00ff). % 255: TRansaction and IndeXes, triggers and unique indexes
-%%efine(DBUTIL,  16#0100). % 256: provides internal interfaces
-%%efine(SUMA,    16#0101). % 257: cluster SUbscription MAnager, event logging and reporting
-%%efine(DBTUX,   16#0102). % 258: ?, ordered indexes
-%%efine(TSMAN,   16#0103). % 259: TableSpace MANager
-%%efine(LGMAN,   16#0104). % 260: Log Group MANager, undo logs
-%%efine(PGMAN,   16#0105). % 261: PaGe and buffer MANagement services
-%%efine(RESTORE, 16#0106). % 262: restoration from online backups
-%%efine(DBINFO,  16#0107). % 263: ?, ndbinfo
-%%efine(DBSPJ,   16#0108). % 264: ?, multiple cursors, pushed-down joins
-%%efine(THRMAN,  16#0109). % 265: THRead MANagement
-%%efine(TRPMAN,  16#010a). % 266: signal TRansPort MANagement
-
-%%efine(MIN_BLOCK_NO,     ?BACKUP).
-%%efine(MAX_BLOCK_NO,     ?TRPMAN).
-%%efine(NO_OF_BLOCKS,     (MAX_BLOCK_NO - MIN_BLOCK_NO + 1)).
+%%efine(BACKUP,           16#00f4). % 243: online BACKUPs and checkpoints
+%%efine(DBTC,             16#00f5). % 245: Transaction Coordinator
+%%efine(DBDIH,            16#00f6). % 246: DIstribution Handler, local and global checkpoints
+%%efine(DBLQH,            16#00f7). % 247: Local Query Handler, coordinator of 2-phase commits
+%%efine(DBACC,            16#00f8). % 248: ACCess control and lock management
+%%efine(DBTUP,            16#00f9). % 249: TUPle manager, physical storage
+-define(DBDICT,           16#00fa). % 250: data DICTionary
+%%efine(DBCNTR,           16#00fb). % 251: startup CoordiNaToR, initialisation and configuration
+-define(QMGR,             16#00fc). % 252: Queue ManaGeR
+%%efine(NDBFS,            16#00fd). % 253: NDB File System abstraction layer
+%%efine(CMVMI,            16#00fe). % 254: Cluster Manager Virtual Machine Interface
+%%efine(TRIX,             16#00ff). % 255: TRansaction and IndeXes, triggers and unique indexes
+%%efine(DBUTIL,           16#0100). % 256: provides internal interfaces
+%%efine(SUMA,             16#0101). % 257: cluster SUbscription MAnager, event logging and reporting
+%%efine(DBTUX,            16#0102). % 258: ?, ordered indexes
+%%efine(TSMAN,            16#0103). % 259: TableSpace MANager
+%%efine(LGMAN,            16#0104). % 260: Log Group MANager, undo logs
+%%efine(PGMAN,            16#0105). % 261: PaGe and buffer MANagement services
+%%efine(RESTORE,          16#0106). % 262: restoration from online backups
+%%efine(DBINFO,           16#0107). % 263: ?, ndbinfo
+%%efine(DBSPJ,            16#0108). % 264: ?, multiple cursors, pushed-down joins
+%%efine(THRMAN,           16#0109). % 265: THRead MANagement
+%%efine(TRPMAN,           16#010a). % 266: signal TRansPort MANagement
 
 %%efine(API_PACKED,       16#07ff). % 2047
 
@@ -65,7 +60,6 @@
 -define(MIN_API_BLOCK_NO, 16#8000). % 32768
 
 %% -- ~/include/kernel/GlobalSignalNumbers.h --
-
 -define(GSN_API_REGCONF,                    1).
 -define(GSN_API_REGREF,                     2).
 -define(GSN_API_REGREQ,                     3).
@@ -113,13 +107,11 @@
 -define(MAX_GSN,                          782).
 
 %% -- other --
+-define(MAX_API_BLOCK_NO, 16#ffff).
 
 -define(LS, $\n).
 
 -define(WORD(N), ((N) * 4)).
-
--define(MAX_API_BLOCK_NO, 16#ffff).
-
 
 -define(NUMBER_TO_REF(Block, Node), ((Block bsl 16) bor Node)).
 

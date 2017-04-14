@@ -3,6 +3,7 @@
              ndbepi,
              ndbepi_app,
              ndbepi_cluster_mgr,
+             ndbepi_connection,
              ndbepi_transporter,
              ndbepi_util
             ]}.

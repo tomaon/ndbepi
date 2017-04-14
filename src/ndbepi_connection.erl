@@ -54,7 +54,7 @@ handle_info({#signal{fragment_info=1}=S, Binary}, #state{fragments=F}=X) ->
     {noreply, X#state{fragments = append_fragments(fragment_id(S), Binary, F)}};
 handle_info({#signal{fragment_info=3}=S, Binary}, #state{fragments=F}=X) ->
     {L, M} = remove_fragments(fragment_id(S), Binary, F),
-    received(S, binary:list_to_bin(L), X#state{fragments = M});
+    received(S, list_to_binary(L), X#state{fragments = M});
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
 
