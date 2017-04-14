@@ -39,8 +39,8 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {stop, enosys, State}.
 
-handle_info({#signal{}=S, Binary}, #state{}=X) ->
-    received(S, Binary, X);
+handle_info({#signal{}=S, Binary}, State) ->
+    received(S, Binary, State);
 handle_info(timeout, Args) ->
     initialized(Args);
 handle_info({'EXIT', _Pid, Reason}, State) ->
@@ -71,10 +71,10 @@ initialized([NodeId, BlockNo]) ->
 found(#state{block_no=B, ets=E}=X) ->
     case baseline_ets:insert_new(E, {B, self()}) of
         true ->
-            configured(X)
+            registered(X)
     end.
 
-configured(State) ->
+registered(State) ->
     {noreply, State}.
 
 

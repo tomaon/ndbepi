@@ -214,10 +214,12 @@ initialized([Local, Remote, Interval, Default, Args]) ->
 found(Default, Args, #state{remote=R, ets=E}=X) ->
     case baseline_ets:insert_new(E, {R, self(), Default}) of
         true ->
-            configured(Default, Args, X#state{tab = baseline_ets:tab(E)})
+            registered(Default, Args, X#state{tab = baseline_ets:tab(E)});
+        false ->
+            {stop, ebusy, X}
     end.
 
-configured(Default, Args, #state{socket=undefined}=X) ->
+registered(Default, Args, #state{}=X) ->
     case apply(gen_tcp, connect, Args) of
         {ok, Socket} ->
             connected(Default, binary:compile_pattern(<<?LS>>), X#state{socket = Socket});
