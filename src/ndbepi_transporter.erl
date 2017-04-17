@@ -3,7 +3,7 @@
 -include("internal.hrl").
 
 -import(ndbepi_util, [endianness/1,
-                      byte/1, part/3, split/2, word/1,
+                      part/3, split/2, word/1,
                       bin_to_word/4, bin_to_words/5,
                       words_to_bin/2,
                       checksum/1, checksum/5
@@ -109,11 +109,11 @@
 -record(state, {
           local       :: node_id(),
           remote      :: node_id(),
-          interval    :: non_neg_integer(),
           ets         :: undefined|pid(),
           tab         :: undefined|ets:tab(),
           socket      :: undefined|gen_tcp:socket(),
           regreq      :: undefined|binary(),
+          tref        :: undefined|timer:tref(),
           rest = <<>> :: binary()
          }).
 
@@ -128,7 +128,7 @@ start_link(Args, Options) ->
 cast(Pid, #signal{byte_order=B}=S, Sections) ->
     E = endianness(B),
     {L, D} = sections_to_words(Sections, E, [], []),
-    cast(Pid, S, L, D, byte(lists:sum(L)), E).
+    cast(Pid, S, L, D, lists:sum(L), E).
 
 cast(Pid, Signal, Length, Data, Size, Endianness) % TODO
   when Size =< ?CHUNK_SZ ->
@@ -169,8 +169,8 @@ handle_cast({send, Packet}, State) ->
 handle_info({tcp, S, Data}, #state{socket=S}=X) ->
     R = X#state.rest,
     received(<<R/binary, Data/binary>>, X#state{rest = <<>>});
-handle_info(timeout, #state{}=X) ->
-    interrupted(X);
+handle_info(regreq, State) ->
+    interrupted(State);
 handle_info(timeout, Args) ->
     initialized(Args);
 handle_info({Reason, S}, #state{socket=S}=X) ->
@@ -186,6 +186,10 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 %% ~/src/transporter/TCP_Transporter.cpp: TCP_Transporter::*
 %%
 
+cleanup(#state{tref=T}=X)
+  when T =/= undefined ->
+    {ok, cancel} = timer:cancel(T),
+    cleanup(X#state{tref = undefined});
 cleanup(#state{socket=S}=X)
   when S =/= undefined ->
     ok = gen_tcp:close(S),
@@ -207,27 +211,29 @@ initialized([Local, Remote, Interval, Default, Args]) ->
         undefined ->
             {stop, not_found, undefined};
         Pid ->
-            found(Default, Args, #state{local = Local, remote = Remote,
-                                        interval = Interval, ets = Pid})
+            found(Interval, Default, Args,
+                  #state{local = Local, remote = Remote, ets = Pid})
     end.
 
-found(Default, Args, #state{remote=R, ets=E}=X) ->
+found(Interval, Default, Args, #state{remote=R, ets=E}=X) ->
     case baseline_ets:insert_new(E, {R, self(), Default}) of
         true ->
-            registered(Default, Args, X#state{tab = baseline_ets:tab(E)});
+            registered(Interval, Default, Args,
+                       X#state{tab = baseline_ets:tab(E)});
         false ->
             {stop, ebusy, X}
     end.
 
-registered(Default, Args, #state{}=X) ->
+registered(Interval, Default, Args, State) ->
     case apply(gen_tcp, connect, Args) of
         {ok, Socket} ->
-            connected(Default, binary:compile_pattern(<<?LS>>), X#state{socket = Socket});
+            connected(Interval, Default, binary:compile_pattern(<<?LS>>),
+                      State#state{socket = Socket});
         {error, Reason} ->
-            {stop, Reason, X}
+            {stop, Reason, State}
     end.
 
-connected(Default, Pattern, #state{socket=S}=X) ->
+connected(Interval, Default, Pattern, #state{socket=S}=X) ->
     %%
     %% ~/src/common/transporter/TransporterRegistry.cpp: TransporterRegistry::start_service/1
     %% ~/src/common/util/SocketAuthenticator.cpp: SocketAuthSimple::client_authenticate/1
@@ -237,40 +243,48 @@ connected(Default, Pattern, #state{socket=S}=X) ->
               <<"ok">>,
               Pattern, 5000) of
         ok ->
-            authorized(Default, Pattern, X);
+            authorized(Interval, Default, Pattern, X);
         {error, Reason} ->
             {stop, Reason, X}
     end.
 
-authorized(Default, Pattern, #state{local=L, remote=R, socket=S}=X) ->
+authorized(Interval, Default, Pattern, #state{local=L, remote=R, socket=S}=X) ->
     case call(S,
               <<(integer_to_binary(L))/binary, " ", ?TCP_TRANSPORTER, ?LS>>,
               <<(integer_to_binary(R))/binary, " ", ?TCP_TRANSPORTER>>,
               Pattern, 5000) of
         ok ->
-            opened(X#state{regreq = regreq(L, Default)});
+            opened(Interval, X#state{regreq = regreq(L, Default)});
         {error, Reason} ->
             {stop, Reason, X}
     end.
 
-opened(#state{socket=S}=X) ->
+opened(Interval, State) ->
+    case timer:send_interval(Interval, regreq) of
+        {ok, TRef} ->
+            configured(State#state{tref = TRef});
+        {error, Reason} ->
+            {stop, Reason, State}
+    end.
+
+configured(#state{socket=S}=X) ->
     ok = inet:setopts(S, [{active, true}]),
-    {noreply, X, 0}. % -> HB
+    {noreply, X}.
 
 
-ready(Packet, #state{interval=I, socket=S}=X) ->
+ready(Packet, #state{socket=S}=X) ->
     case gen_tcp:send(S, Packet) of
         ok ->
-            {noreply, X, I};
+            {noreply, X};
         {error, Reason} ->
             {stop, Reason, X}
     end.
 
 
-interrupted(#state{interval=I, socket=S, regreq=R}=X) ->
+interrupted(#state{socket=S, regreq=R}=X) ->
     case gen_tcp:send(S, R) of
         ok ->
-            {noreply, X, I};
+            {noreply, X};
         {error, Reason} ->
             {stop, Reason, X}
     end.
@@ -282,19 +296,19 @@ received(Binary, State) ->
 received(Binary, Size, State)
   when Size >= 3 ->
     received(Binary, Size, unpack(Binary), State);
-received(Binary, _Size, #state{interval=I}=X) ->
-    {noreply, X#state{rest = Binary}, I}.
+received(Binary, _Size, State) ->
+    {noreply, State#state{rest = Binary}}.
 
 received(Binary, Size, #signal{message_length=M}=S, State)
   when M > 0, Size >= M ->
     {B, R} = split(Binary, M),
     accepted(B, S, State#state{rest = R});
-received(Binary, _Size, #signal{message_length=M}, #state{interval=I}=X) ->
+received(Binary, _Size, #signal{message_length=M}, State) ->
     case M =:= 0 orelse M > word(?MAX_RECV_MESSAGE_BYTESIZE) of
         false ->
-            {noreply, X#state{rest = Binary}, I};
+            {noreply, State#state{rest = Binary}};
         true ->
-            {stop, ebadmsg, X}
+            {stop, ebadmsg, State}
     end.
 
 accepted(Binary, #signal{checksum_included=0, message_length=M}=S, State) ->

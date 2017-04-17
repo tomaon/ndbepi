@@ -4,7 +4,7 @@
 
 %% -- private --
 -export([endianness/1]).
--export([byte/1, part/3, split/2, word/1]).
+-export([part/3, split/2, word/1]).
 -export([bin_to_word/4, bin_to_words/5]).
 -export([words_to_bin/2]).
 -export([checksum/1, checksum/5]).
@@ -15,10 +15,6 @@
 endianness(0) -> little;
 endianness(1) -> big.
 
-
--spec byte(integer()) -> integer().
-byte(Int) ->
-    Int * ?WORD(1).
 
 -spec part(binary(), non_neg_integer(), integer()) -> binary().
 part(Subject, Start, Length) ->

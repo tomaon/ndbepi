@@ -71,10 +71,12 @@ initialized([NodeId, BlockNo]) ->
 found(#state{block_no=B, ets=E}=X) ->
     case baseline_ets:insert_new(E, {B, self()}) of
         true ->
-            registered(X)
+            configured(X);
+        false ->
+            {stop, ebusy, X}
     end.
 
-registered(State) ->
+configured(State) ->
     {noreply, State}.
 
 
