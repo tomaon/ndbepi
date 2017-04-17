@@ -15,10 +15,10 @@
           node_id    :: node_id(),
           block_no   :: pos_integer(),
           request_id :: non_neg_integer(),
+          fragments  :: map(),
           ets        :: undefined|pid(),
           tab        :: undefined|ets:tab(),
-          from       :: undefined|{pid(), reference()},
-          fragments  :: undefined|map()
+          from       :: undefined|{pid(), reference()}
          }).
 
 %% == private ==
@@ -29,7 +29,12 @@ start_link(NodeId, BlockNo) ->
 
 
 call(Pid) ->
-    gen_server:call(Pid, {get_table_by_name, [<<"test/def/city">>], undefined}).
+    {ok, L1} = gen_server:call(Pid, {get_table_by_name, <<"test/def/city">>, undefined}),
+    [io:format("~p~n~n", [E]) || E <- L1 ],
+    {ok, L2} = gen_server:call(Pid, {get_table_by_id, 1, undefined}),
+    [io:format("~p~n~n", [E]) || E <- L2 ].
+
+%% ndbepi_connection:call(element(2, ndbepi:connect())).
 
 %% -- behaviour: gen_server --
 
@@ -48,13 +53,17 @@ handle_call(Request, From, #state{request_id=R, from=undefined}=X) ->
 handle_cast(_Request, State) ->
     {stop, enosys, State}.
 
-handle_info({#signal{fragment_info=0}=S, Binary}, #state{}=X) ->
-    received(S, Binary, X);
-handle_info({#signal{fragment_info=1}=S, Binary}, #state{fragments=F}=X) ->
-    {noreply, X#state{fragments = append_fragments(fragment_id(S), Binary, F)}};
-handle_info({#signal{fragment_info=3}=S, Binary}, #state{fragments=F}=X) ->
-    {L, M} = remove_fragments(fragment_id(S), Binary, F),
-    received(S, list_to_binary(L), X#state{fragments = M});
+handle_info({#signal{fragment_info=0}=S, Binary}, State) ->
+    received(S, Binary, State);
+handle_info({#signal{fragment_info=3}=S, Binary}, State) ->
+    {L, M} = maps:take(key(S), State#state.fragments),
+    received(S, list_to_binary(lists:reverse([value(Binary)|L])), State#state{fragments = M});
+handle_info({#signal{fragment_info=2}=S, Binary}, State) ->
+    M = maps:update_with(key(S), fun(V) -> [value(Binary)|V] end, State#state.fragments),
+    {noreply, State#state{fragments = M}};
+handle_info({#signal{fragment_info=1}=S, Binary}, State) ->
+    M = maps:put(key(S), [value(Binary)], State#state.fragments),
+    {noreply, State#state{fragments = M}};
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State}.
 
@@ -69,7 +78,7 @@ cleanup(_) ->
 
 setup([NodeId, BlockNo]) ->
     false = process_flag(trap_exit, true),
-    loaded(#state{node_id = NodeId, block_no = BlockNo, request_id = 0}).
+    loaded(#state{node_id = NodeId, block_no = BlockNo, request_id = 0, fragments = maps:new()}).
 
 
 loaded(#state{}=X) ->
@@ -92,10 +101,10 @@ configured(State) ->
     {ok, State}.
 
 
-ready({_, S, Z}=A, #state{node_id=N, block_no=B, request_id=R, tab=T}=X) ->
+ready({_, _, Z}=A, #state{node_id=N, block_no=B, request_id=R, tab=T}=X) ->
     try select(T, Z, B) of
         {_, P, D} ->
-            ok = ndbepi_transporter:cast(P, signal(A, N, B, R, D), S),
+            ok = apply(ndbepi_transporter, cast, [P|signal(A, N, B, R, D)]),
             {noreply, X}
     catch
         error:Reason ->
@@ -118,94 +127,92 @@ select(Tab, NodeId, BlockNo) ->
             hd(List)
     end.
 
-signal({get_table_by_id, [Id], _}, NodeId, BlockNo, RequestId, Default) ->
+signal({get_table_by_id, Id, _}, NodeId, BlockNo, RequestId, Default) ->
     %%
-    %% ~/include/kernel/signaldata/GetTabInfo.hpp
+    %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoReq
     %%
-    Default#signal{gsn = ?GSN_GET_TABINFOREQ,
-                   send_block_no = BlockNo,
-                   recv_block_no = ?DBDICT,
-                   signal_data_length = 5,
-                   signal_data = [
-                                  RequestId,
-                                  ?NUMBER_TO_REF(BlockNo, NodeId),
-                                  2, % 0(=RequestById) + 2(=LongSignalConf)
-                                  Id,
-                                  0  % TODO
-                                 ],
-                   sections_length = 0
-                  };
-signal({get_table_by_name, [Name], _}, NodeId, BlockNo, RequestId, Default) ->
+    [
+     Default#signal{gsn = ?GSN_GET_TABINFOREQ,
+                    send_block_no = BlockNo,
+                    recv_block_no = ?DBDICT,
+                    signal_data_length = 5,
+                    signal_data = [
+                                   RequestId,
+                                   ?NUMBER_TO_REF(BlockNo, NodeId),
+                                   2, % 0(=RequestById) + 2(=LongSignalConf)
+                                   Id,
+                                   0  % TODO
+                                  ],
+                    sections_length = 0
+                   },
+     []
+    ];
+signal({get_table_by_name, Name, _}, NodeId, BlockNo, RequestId, Default) ->
     %%
-    %% ~/include/kernel/signaldata/GetTabInfo.hpp
+    %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoReq
     %%
-    Default#signal{gsn = ?GSN_GET_TABINFOREQ,
-                   send_block_no = BlockNo,
-                   recv_block_no = ?DBDICT,
-                   signal_data_length = 5,
-                   signal_data = [
-                                  RequestId,
-                                  ?NUMBER_TO_REF(BlockNo, NodeId),
-                                  3, % 1(=RequestByName) + 2(=LongSignalConf)
-                                  size(Name) + 1, % NULL terminated
-                                  0
-                                 ],
-                   sections_length = 1
-                  }.
+    [
+     Default#signal{gsn = ?GSN_GET_TABINFOREQ,
+                    send_block_no = BlockNo,
+                    recv_block_no = ?DBDICT,
+                    signal_data_length = 5,
+                    signal_data = [
+                                   RequestId,
+                                   ?NUMBER_TO_REF(BlockNo, NodeId),
+                                   3, % 1(=RequestByName) + 2(=LongSignalConf)
+                                   size(Name) + 1, % NULL terminated
+                                   0
+                                  ],
+                    sections_length = 1
+                   },
+     [Name]
+    ].
 
-%% 52,15,0,20, 24,0,0,4, 1,128,250,0,
-%% 0,0,0,0,
-%% 1,0,0,0,
-%% 201,0,1,128,
-%% 3,0,0,0,
-%% 14,0,0,0,
-%% 0,0,0,0,
-
-%% 4,0,0,0, 116,101,115,116, 47,100,101,102, 47,99,105,116, 121,0,0,0,
-
-%% 225,237,132,246
-
-%% ndbepi_connection:call(element(2, ndbepi:connect())).
-
-received(#signal{gsn=?GSN_GET_TABINFO_CONF}, Binary, #state{}=X) ->
-    L = unpack(Binary, 0, size(Binary), []),
-    _ = gen_server:reply(X#state.from, {ok, L}),
-    {noreply, X#state{from = undefined}};
-received(#signal{gsn=?GSN_GET_TABINFOREF}=S, <<>>, #state{}=X) ->
+received(#signal{gsn=?GSN_GET_TABINFO_CONF, signal_data=D}, Binary, State) ->
+    %%
+    %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoConf
+    %% ~/src/ndbapi/NdbDictionalyImpl.cpp: NdbDictInterface::execGET_TABINFO_CONF/2
+    %%
+    case lists:nth(1, D) =:= State#state.request_id of
+        true ->
+            {noreply, reply({ok, unpack(Binary, 0, size(Binary), [])}, State)};
+        false ->
+            {noreply, State}
+    end;
+received(#signal{gsn=?GSN_GET_TABINFOREF, signal_data=D}, <<>>, State) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoRef
     %% ~/src/ndbapi/NdbDictionalyImpl.cpp: NdbDictInterface::execGET_TABINFO_REF/2
     %%
-    Reason = case lists:nth(6, S#signal.signal_data) of
-                 701 -> <<"Busy">>;
-                 702 -> <<"TableNameTooLong">>;
-                 709 -> <<"InvalidTableId">>;
-                 710 -> <<"NoFetchByName">>;
-                 723 -> <<"TableNotDefined">>
-             end,
-    _ = gen_server:reply(X#state.from, {error, Reason}),
-    {noreply, X#state{from = undefined}};
+    case lists:nth(1, D) =:= State#state.request_id of
+        true ->
+            Reason = case lists:nth(6, D) of
+                         701 -> <<"Busy">>;
+                         702 -> <<"TableNameTooLong">>;
+                         709 -> <<"InvalidTableId">>;
+                         710 -> <<"NoFetchByName">>;
+                         723 -> <<"TableNotDefined">>
+                     end,
+            {noreply, reply({error, Reason}, State)};
+        false ->
+            {noreply, State}
+    end;
 received(Signal, Binary, State) ->
     ok = error_logger:warning_msg("[~p:~p] ~p,~p~n", [?MODULE, self(), Signal, Binary]),
     {noreply, State}.
 
 
-append_fragments(Key, Binary, undefined) ->
-    append_fragments(Key, Binary, maps:new());
-append_fragments(Key, Binary, Map) ->
-    List = maps:get(Key, Map, []),
-    maps:put(Key, [fragment(Binary)|List], Map).
+reply(Reply, #state{from=F}=X) ->
+    _ = gen_server:reply(F, Reply),
+    X#state{from = undefined}.
 
-fragment(Binary) ->
+key(#signal{signal_data_length=L, signal_data=D}) ->
+    lists:nth(L, D).
+
+value(Binary) ->
     {_, B} = split_binary(Binary, ?WORD(1)),  % element(1, _) = size(B)
     B.
 
-fragment_id(#signal{signal_data_length=L, signal_data=D}) ->
-    lists:nth(L, D).
-
-remove_fragments(Key, Binary, Map) ->
-    List = maps:get(Key, Map, []),
-    {lists:reverse([fragment(Binary)|List]), maps:remove(Key, Map)}.
 
 unpack(_Binary, _Start, 0, List) ->
     lists:reverse(List);
