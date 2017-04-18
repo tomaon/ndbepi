@@ -29,7 +29,7 @@
 
 %% -- ~/include/kernel/BlockNumbers.h --
 %%efine(BACKUP,           16#00f4). % 243: online BACKUPs and checkpoints
-%%efine(DBTC,             16#00f5). % 245: Transaction Coordinator
+-define(DBTC,             16#00f5). % 245: Transaction Coordinator
 %%efine(DBDIH,            16#00f6). % 246: DIstribution Handler, local and global checkpoints
 %%efine(DBLQH,            16#00f7). % 247: Local Query Handler, coordinator of 2-phase commits
 %%efine(DBACC,            16#00f8). % 248: ACCess control and lock management
@@ -66,31 +66,34 @@
 -define(GSN_GET_TABINFO_CONF,             190).
 -define(GSN_GET_TABINFOREF,                23).
 -define(GSN_GET_TABINFOREQ,                24).
+-define(GSN_TCRELEASECONF,                 34).
+%%efine(GSN_TCRELEASEREF,                  35).
+-define(GSN_TCRELEASEREQ,                  36).
+-define(GSN_TCSEIZECONF,                   37).
+-define(GSN_TCSEIZEREF,                    38).
+-define(GSN_TCSEIZEREQ,                    39).
+
+%%efine(GSN_TCKEYCONF,                     10).
+%%efine(GSN_TCKEYREF,                      11).
+%%efine(GSN_TCKEYREQ,                      12).
+
+%%efine(GSN_TRANSID_AI,                     5).
+
+%%efine(GSN_TCROLLBACKCONF,                13).
+%%efine(GSN_TCROLLBACKREF,                 14).
+%%efine(GSN_TCROLLBACKREQ,                 15).
 
 %%efine(GSN_ATTRINFO,                       4).
-%%efine(GSN_TRANSID_AI,                     5).
 %%efine(GSN_KEYINFO,                        6).
 %%efine GSN_READCONF,                       7).
 %%efine(GSN_TCKEY_FAILCONF,                 8).
 %%efine(GSN_TCKEY_FAILREF,                  9).
-%%efine(GSN_TCKEYCONF,                     10).
-%%efine(GSN_TCKEYREF,                      11).
-%%efine(GSN_TCKEYREQ,                      12).
-%%efine(GSN_TCROLLBACKCONF,                13).
-%%efine(GSN_TCROLLBACKREF,                 14).
-%%efine(GSN_TCROLLBACKREQ,                 15).
 %%efine(GSN_TCROLLBACKREP,                 16).
 %%efine(GSN_TC_COMMITCONF,                 17).
 %%efine(GSN_TC_COMMITREF,                  18).
 %%efine(GSN_TC_COMMITREQ,                  19).
 %%efine(GSN_NODE_FAILREP,                  26).
 %%efine(GSN_NF_COMPLETEREP,                27).
-%%efine(GSN_TCRELEASECONF,                 34).
-%%efine(GSN_TCRELEASEREF,                  35).
-%%efine(GSN_TCRELEASEREQ,                  36).
-%%efine(GSN_TCSEIZECONF,                   37).
-%%efine(GSN_TCSEIZEREF,                    38).
-%%efine(GSN_TCSEIZEREQ,                    39).
 %%efine(GSN_ALLOC_NODEID_CONF,             61).
 %%efine(GSN_ALLOC_NODEID_REF,              62).
 %%efine(GSN_ALLOC_NODEID_REQ,              60).
@@ -138,7 +141,7 @@
           fragment_info = 0      :: non_neg_integer(),
           prio = 1               :: non_neg_integer(),           % 1=JBB
           version_id = 0         :: non_neg_integer(),
-          trace = 0              :: 0|1,
+          trace = 1              :: 1,                           % 1=TraceAPI
           signal_data_length = 0 :: non_neg_integer(),
           signal_data = []       :: [integer()],
           sections_length = 0    :: non_neg_integer(),

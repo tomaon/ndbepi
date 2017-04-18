@@ -30,9 +30,12 @@ start_link(NodeId, BlockNo) ->
 
 call(Pid) ->
     {ok, L1} = gen_server:call(Pid, {get_table_by_name, <<"test/def/city">>, undefined}),
-    [io:format("~p~n~n", [E]) || E <- L1 ],
+    [io:format("~p~n", [E]) || E <- L1 ], io:format("~n~n"),
     {ok, L2} = gen_server:call(Pid, {get_table_by_id, 1, undefined}),
-    [io:format("~p~n~n", [E]) || E <- L2 ].
+    io:format("~p~n", [length(L2)]),
+    {ok, I3} = gen_server:call(Pid, {startTransaction, 0, undefined}),
+    io:format("~p~n~n", [I3]),
+    ok = gen_server:call(Pid, {closeTransaction, I3, undefined}).
 
 %% ndbepi_connection:call(element(2, ndbepi:connect())).
 
@@ -127,6 +130,37 @@ select(Tab, NodeId, BlockNo) ->
             hd(List)
     end.
 
+signal({startTransaction, Instance, _}, NodeId, BlockNo, _RequestId, Default) ->
+    [
+     Default#signal{gsn = ?GSN_TCSEIZEREQ,
+                    send_block_no = BlockNo,
+                    recv_block_no = ?DBTC,
+                    signal_data_length = 3,
+                    signal_data = [
+                                   999,
+                                   ?NUMBER_TO_REF(BlockNo, NodeId),
+                                   Instance
+                                  ],
+                    sections_length = 0},
+     []
+    ];
+signal({closeTransaction, Id, _}, NodeId, BlockNo, __RequestId, Default) ->
+    %%
+    %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::execute/3
+    %%
+    [
+     Default#signal{gsn = ?GSN_TCRELEASEREQ,
+                    send_block_no = BlockNo,
+                    recv_block_no = ?DBTC,
+                    signal_data_length = 3,
+                    signal_data = [
+                                   Id,
+                                   ?NUMBER_TO_REF(BlockNo, NodeId),
+                                   999
+                                  ],
+                    sections_length = 0},
+     []
+    ];
 signal({get_table_by_id, Id, _}, NodeId, BlockNo, RequestId, Default) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoReq
@@ -143,8 +177,7 @@ signal({get_table_by_id, Id, _}, NodeId, BlockNo, RequestId, Default) ->
                                    Id,
                                    0  % TODO
                                   ],
-                    sections_length = 0
-                   },
+                    sections_length = 0},
      []
     ];
 signal({get_table_by_name, Name, _}, NodeId, BlockNo, RequestId, Default) ->
@@ -163,11 +196,24 @@ signal({get_table_by_name, Name, _}, NodeId, BlockNo, RequestId, Default) ->
                                    size(Name) + 1, % NULL terminated
                                    0
                                   ],
-                    sections_length = 1
-                   },
+                    sections_length = 1},
      [Name]
     ].
 
+received(#signal{gsn=?GSN_TCRELEASECONF}, <<>>, State) ->
+    {noreply, reply(ok, State)};
+received(#signal{gsn=?GSN_TCSEIZECONF, signal_data=D}, <<>>, State) ->
+    %%
+    %% signal_data_length != 3 ?, TODO
+    %%
+    %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZECONF/1
+    %%
+    {noreply, reply({ok, lists:nth(2, D)}, State)};
+received(#signal{gsn=?GSN_TCSEIZEREF, signal_data=D}, <<>>, State) ->
+    %%
+    %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZEREF/1
+    %%
+    {noreply, reply({error, lists:nth(2, D)}, State)}; % ndberror.c, TODO
 received(#signal{gsn=?GSN_GET_TABINFO_CONF, signal_data=D}, Binary, State) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoConf
