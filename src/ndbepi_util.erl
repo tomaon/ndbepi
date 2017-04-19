@@ -49,7 +49,7 @@ words_to_bin(Words, Endianness) ->
     list_to_binary(lists:map(fun(E) -> word_to_bin(E, Endianness) end, Words)).
 
 
--spec checksum([integer()]) -> integer().
+-spec checksum([non_neg_integer()]) -> non_neg_integer().
 checksum(Words) ->
     mgmepi_util:checksum(Words).
 
