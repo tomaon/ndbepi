@@ -6,129 +6,63 @@
 -export([start_link/2]).
 -export([call/1]).
 
--behaviour(gen_server).
--export([init/1, terminate/2, code_change/3,
-         handle_call/3, handle_cast/2, handle_info/2]).
+-behaviour(ndbepi_gen_block).
+-export([init/0, terminate/2, code_change/3,
+         handle_call/6, handle_info/3]).
 
 %% -- internal --
--record(state, {
-          node_id    :: node_id(),
-          block_no   :: pos_integer(),
+-record(data, {
           request_id :: non_neg_integer(),
-          fragments  :: map(),
-          ets        :: undefined|pid(),
-          tab        :: undefined|ets:tab(),
-          from       :: undefined|{pid(), reference()}
+          from       :: undefined|{pid(), term()}
          }).
 
 %% == private ==
 
 -spec start_link(node_id(), pos_integer()) -> {ok, pid()}|{error, _}.
 start_link(NodeId, BlockNo) ->
-    gen_server:start_link(?MODULE, [NodeId, BlockNo], []).
+    ndbepi_gen_block:start_link(?MODULE, NodeId, BlockNo, []).
 
 
 call(Pid) ->
-    {ok, L1} = gen_server:call(Pid, {get_table_by_name, <<"test/def/city">>, undefined}),
+    {ok, L1} = ndbepi_gen_block:call(Pid, {get_table_by_name, <<"test/def/city">>, undefined}),
     [io:format("~p~n", [E]) || E <- L1 ], io:format("~n~n"),
-    {ok, L2} = gen_server:call(Pid, {get_table_by_id, 1, undefined}),
+    {ok, L2} = ndbepi_gen_block:call(Pid, {get_table_by_id, 1, undefined}),
     io:format("~p~n", [length(L2)]),
-    {ok, I3} = gen_server:call(Pid, {startTransaction, 0, undefined}),
+    {ok, I3} = ndbepi_gen_block:call(Pid, {startTransaction, 0, undefined}),
     io:format("~p~n~n", [I3]),
-    ok = gen_server:call(Pid, {closeTransaction, I3, undefined}).
+    ok = ndbepi_gen_block:call(Pid, {closeTransaction, I3, undefined}).
 
 %% ndbepi_connection:call(element(2, ndbepi:connect())).
 
-%% -- behaviour: gen_server --
+%% -- behaviour: ndbepi_gen_block --
 
-init(Args) ->
-    setup(Args).
+init() ->
+    setup().
 
-terminate(_Reason, State) ->
-    cleanup(State).
+terminate(_Reason, Data) ->
+    cleanup(Data).
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+code_change(_OldVsn, Data, _Extra) ->
+    {ok, Data}.
 
-handle_call(Request, From, #state{request_id=R, from=undefined}=X) ->
-    ready(Request, X#state{request_id = R + 1, from = From}).
+handle_call(Request, NodeId, BlockNo, Default, From, #data{request_id=R, from=undefined}=D) ->
+    ready(Request, NodeId, BlockNo, Default, D#data{request_id = R + 1, from = From}).
 
-handle_cast(_Request, State) ->
-    {stop, enosys, State}.
-
-handle_info({#signal{fragment_info=0}=S, Binary}, State) ->
-    received(S, Binary, State);
-handle_info({#signal{fragment_info=3}=S, Binary}, State) ->
-    {L, M} = maps:take(key(S), State#state.fragments),
-    received(S, list_to_binary(lists:reverse([value(Binary)|L])), State#state{fragments = M});
-handle_info({#signal{fragment_info=2}=S, Binary}, State) ->
-    M = maps:update_with(key(S), fun(V) -> [value(Binary)|V] end, State#state.fragments),
-    {noreply, State#state{fragments = M}};
-handle_info({#signal{fragment_info=1}=S, Binary}, State) ->
-    M = maps:put(key(S), [value(Binary)], State#state.fragments),
-    {noreply, State#state{fragments = M}};
-handle_info({'EXIT', _Pid, Reason}, State) ->
-    {stop, Reason, State}.
+handle_info(Signal, Binary, Data) ->
+    received(Signal, Binary, Data).
 
 %% == internal ==
 
-cleanup(#state{ets=E}=X)
-  when E =/= undefined ->
-    catch true = baseline_ets:delete(E, X#state.block_no),
-    cleanup(X#state{ets = undefined});
 cleanup(_) ->
-    baseline:flush().
+    ok.
 
-setup([NodeId, BlockNo]) ->
-    false = process_flag(trap_exit, true),
-    loaded(#state{node_id = NodeId, block_no = BlockNo, request_id = 0, fragments = maps:new()}).
-
-
-loaded(#state{}=X) ->
-    case baseline_app:find(ndbepi_sup, ndbepi_ets, 100, 1) of
-        undefined ->
-            {stop, not_found};
-        Pid ->
-            found(X#state{ets = Pid})
-    end.
-
-found(#state{block_no=B, ets=E}=X) ->
-    case baseline_ets:insert_new(E, {B, self()}) of
-        true ->
-            configured(X#state{tab = baseline_ets:tab(E)});
-        false ->
-            {stop, ebusy} % -> retry
-    end.
-
-configured(State) ->
-    {ok, State}.
+setup() ->
+    {ok, #data{request_id = 0}}.
 
 
-ready({_, _, Z}=A, #state{node_id=N, block_no=B, request_id=R, tab=T}=X) ->
-    try select(T, Z, B) of
-        {_, P, D} ->
-            ok = apply(ndbepi_transporter, cast, [P|signal(A, N, B, R, D)]),
-            {noreply, X}
-    catch
-        error:Reason ->
-            {stop, Reason, X}
-    end.
+ready(Request, NodeId, BlockNo, Default, #data{request_id = R}=D) ->
+    {noreply, signal(Request, NodeId, BlockNo, R, Default), D}.
 
-
-select(Tab, undefined, Seed) ->
-    case ets:select(Tab, [{{'$1', '_', '_'}, [], ['$_']}]) of
-        [] ->
-            error(badarg);
-        List ->
-            lists:nth(1 + Seed rem length(List), List)
-    end;
-select(Tab, NodeId, BlockNo) ->
-    case ets:select(Tab, [{{'$1', '_', '_'}, [{'=', '$1', NodeId}], ['$_']}]) of
-        [] ->
-            select(Tab, undefined, BlockNo);
-        List ->
-            hd(List)
-    end.
 
 signal({startTransaction, Instance, _}, NodeId, BlockNo, _RequestId, Default) ->
     [
@@ -200,37 +134,37 @@ signal({get_table_by_name, Name, _}, NodeId, BlockNo, RequestId, Default) ->
      [Name]
     ].
 
-received(#signal{gsn=?GSN_TCRELEASECONF}, <<>>, State) ->
-    {noreply, reply(ok, State)};
-received(#signal{gsn=?GSN_TCSEIZECONF, signal_data=D}, <<>>, State) ->
+received(#signal{gsn=?GSN_TCRELEASECONF}, <<>>, Data) ->
+    {noreply, reply(ok, Data)};
+received(#signal{gsn=?GSN_TCSEIZECONF, signal_data=D}, <<>>, Data) ->
     %%
     %% signal_data_length != 3 ?, TODO
     %%
     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZECONF/1
     %%
-    {noreply, reply({ok, lists:nth(2, D)}, State)};
-received(#signal{gsn=?GSN_TCSEIZEREF, signal_data=D}, <<>>, State) ->
+    {noreply, reply({ok, lists:nth(2, D)}, Data)};
+received(#signal{gsn=?GSN_TCSEIZEREF, signal_data=D}, <<>>, Data) ->
     %%
     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZEREF/1
     %%
-    {noreply, reply({error, lists:nth(2, D)}, State)}; % ndberror.c, TODO
-received(#signal{gsn=?GSN_GET_TABINFO_CONF, signal_data=D}, Binary, State) ->
+    {noreply, reply({error, lists:nth(2, D)}, Data)}; % ndberror.c, TODO
+received(#signal{gsn=?GSN_GET_TABINFO_CONF, signal_data=D}, Binary, Data) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoConf
     %% ~/src/ndbapi/NdbDictionalyImpl.cpp: NdbDictInterface::execGET_TABINFO_CONF/2
     %%
-    case lists:nth(1, D) =:= State#state.request_id of
+    case lists:nth(1, D) =:= Data#data.request_id of
         true ->
-            {noreply, reply({ok, unpack(Binary, 0, size(Binary), [])}, State)};
+            {noreply, reply({ok, unpack(Binary, 0, size(Binary), [])}, Data)};
         false ->
-            {noreply, State}
+            {noreply, Data}
     end;
-received(#signal{gsn=?GSN_GET_TABINFOREF, signal_data=D}, <<>>, State) ->
+received(#signal{gsn=?GSN_GET_TABINFOREF, signal_data=D}, <<>>, Data) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoRef
     %% ~/src/ndbapi/NdbDictionalyImpl.cpp: NdbDictInterface::execGET_TABINFO_REF/2
     %%
-    case lists:nth(1, D) =:= State#state.request_id of
+    case lists:nth(1, D) =:= Data#data.request_id of
         true ->
             Reason = case lists:nth(6, D) of
                          701 -> <<"Busy">>;
@@ -239,26 +173,18 @@ received(#signal{gsn=?GSN_GET_TABINFOREF, signal_data=D}, <<>>, State) ->
                          710 -> <<"NoFetchByName">>;
                          723 -> <<"TableNotDefined">>
                      end,
-            {noreply, reply({error, Reason}, State)};
+            {noreply, reply({error, Reason}, Data)};
         false ->
-            {noreply, State}
+            {noreply, Data}
     end;
-received(Signal, Binary, State) ->
+received(Signal, Binary, Data) ->
     ok = error_logger:warning_msg("[~p:~p] ~p,~p~n", [?MODULE, self(), Signal, Binary]),
-    {noreply, State}.
+    {noreply, Data}.
 
 
-reply(Reply, #state{from=F}=X) ->
+reply(Reply, #data{from=F}=X) ->
     _ = gen_server:reply(F, Reply),
-    X#state{from = undefined}.
-
-key(#signal{signal_data_length=L, signal_data=D}) ->
-    lists:nth(L, D).
-
-value(Binary) ->
-    {_, B} = split_binary(Binary, ?WORD(1)),  % element(1, _) = size(B)
-    B.
-
+    X#data{from = undefined}.
 
 unpack(_Binary, _Start, 0, List) ->
     lists:reverse(List);

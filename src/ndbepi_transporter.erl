@@ -169,8 +169,8 @@ handle_cast({send, Packet}, State) ->
 handle_info({tcp, S, Data}, #state{socket=S}=X) ->
     R = X#state.rest,
     received(<<R/binary, Data/binary>>, X#state{rest = <<>>});
-handle_info(regreq, State) ->
-    interrupted(State);
+handle_info(timeout, #state{}=X) ->
+    interrupted(X);
 handle_info(timeout, Args) ->
     initialized(Args);
 handle_info({Reason, S}, #state{socket=S}=X) ->
@@ -260,7 +260,7 @@ authorized(Interval, Default, Pattern, #state{local=L, remote=R, socket=S}=X) ->
     end.
 
 opened(Interval, State) ->
-    case timer:send_interval(Interval, regreq) of
+    case timer:send_interval(Interval, timeout) of
         {ok, TRef} ->
             configured(State#state{tref = TRef});
         {error, Reason} ->
@@ -269,7 +269,7 @@ opened(Interval, State) ->
 
 configured(#state{socket=S}=X) ->
     ok = inet:setopts(S, [{active, true}]),
-    {noreply, X}.
+    {noreply, X, 0}.
 
 
 ready(Packet, #state{socket=S}=X) ->

@@ -150,6 +150,8 @@
 
 %% == type ==
 
+-type(block_no() :: pos_integer()).
+
 -type(signal() :: #signal{}).
 
 -endif. % internal

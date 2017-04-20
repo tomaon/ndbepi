@@ -1,3 +1,9 @@
+--
+-- tested: Wireshark-2.2.6 (lua-5.2.4)
+--
+-- run: wireshark -X lua_script:ndbapi.lua
+--
+
 local BLOCK_NO = {
    [0x00f4] = "BACKUP",
    [0x00f5] = "DBTC",
@@ -151,11 +157,4 @@ function proto.dissector(tvb, pinfo, tree)
 
 end
 
--- DissectorTable.get("tcp.port"):add(50000, proto) -- TODO
-
-local t = DissectorTable.get("tcp.port")
-t:add( 1186, proto)
-t:add(59727, proto)
-t:add(60204, proto)
-t:add(60208, proto)
-t:add(60209, proto)
+DissectorTable.get("tcp.port"):add("50000-65535", proto) -- TODO
