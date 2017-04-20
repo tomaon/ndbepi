@@ -2,6 +2,8 @@
 
 -include("internal.hrl").
 
+-import(ndbepi_util, [bin_to_word/4]).
+
 %% -- private --
 -export([start_link/2]).
 -export([call/1]).
@@ -24,13 +26,13 @@ start_link(NodeId, BlockNo) ->
 
 
 call(Pid) ->
-    {ok, L1} = ndbepi_gen_block:call(Pid, {get_table_by_name, <<"test/def/city">>, undefined}),
+    {ok, L1} = ndbepi_gen_block:call(Pid, {get_table_by_name, [<<"test/def/city">>], undefined}),
     [io:format("~p~n", [E]) || E <- L1 ], io:format("~n~n"),
-    {ok, L2} = ndbepi_gen_block:call(Pid, {get_table_by_id, 1, undefined}),
+    {ok, L2} = ndbepi_gen_block:call(Pid, {get_table_by_id, [1], undefined}),
     io:format("~p~n", [length(L2)]),
-    {ok, I3} = ndbepi_gen_block:call(Pid, {startTransaction, 0, undefined}),
+    {ok, I3} = ndbepi_gen_block:call(Pid, {startTransaction, [0], undefined}),
     io:format("~p~n~n", [I3]),
-    ok = ndbepi_gen_block:call(Pid, {closeTransaction, I3, undefined}).
+    ok = ndbepi_gen_block:call(Pid, {closeTransaction, [I3], undefined}).
 
 %% ndbepi_connection:call(element(2, ndbepi:connect())).
 
@@ -45,8 +47,8 @@ terminate(_Reason, Data) ->
 code_change(_OldVsn, Data, _Extra) ->
     {ok, Data}.
 
-handle_call(Request, NodeId, BlockNo, Default, From, #data{request_id=R, from=undefined}=D) ->
-    ready(Request, NodeId, BlockNo, Default, D#data{request_id = R + 1, from = From}).
+handle_call(Request, NodeId, BlockNo, Signal, From, #data{request_id=R, from=undefined}=D) ->
+    ready(Request, NodeId, BlockNo, Signal, D#data{request_id = R + 1, from = From}).
 
 handle_info(Signal, Binary, Data) ->
     received(Signal, Binary, Data).
@@ -64,7 +66,7 @@ ready(Request, NodeId, BlockNo, Default, #data{request_id = R}=D) ->
     {noreply, signal(Request, NodeId, BlockNo, R, Default), D}.
 
 
-signal({startTransaction, Instance, _}, NodeId, BlockNo, _RequestId, Default) ->
+signal({startTransaction, [Instance]}, NodeId, BlockNo, _RequestId, Default) ->
     [
      Default#signal{gsn = ?GSN_TCSEIZEREQ,
                     send_block_no = BlockNo,
@@ -78,7 +80,7 @@ signal({startTransaction, Instance, _}, NodeId, BlockNo, _RequestId, Default) ->
                     sections_length = 0},
      []
     ];
-signal({closeTransaction, Id, _}, NodeId, BlockNo, __RequestId, Default) ->
+signal({closeTransaction, [Id]}, NodeId, BlockNo, _RequestId, Default) ->
     %%
     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::execute/3
     %%
@@ -95,7 +97,7 @@ signal({closeTransaction, Id, _}, NodeId, BlockNo, __RequestId, Default) ->
                     sections_length = 0},
      []
     ];
-signal({get_table_by_id, Id, _}, NodeId, BlockNo, RequestId, Default) ->
+signal({get_table_by_id, [Id]}, NodeId, BlockNo, RequestId, Default) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoReq
     %%
@@ -114,7 +116,7 @@ signal({get_table_by_id, Id, _}, NodeId, BlockNo, RequestId, Default) ->
                     sections_length = 0},
      []
     ];
-signal({get_table_by_name, Name, _}, NodeId, BlockNo, RequestId, Default) ->
+signal({get_table_by_name, [Name]}, NodeId, BlockNo, RequestId, Default) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoReq
     %%
@@ -155,7 +157,7 @@ received(#signal{gsn=?GSN_GET_TABINFO_CONF, signal_data=D}, Binary, Data) ->
     %%
     case lists:nth(1, D) =:= Data#data.request_id of
         true ->
-            {noreply, reply({ok, unpack(Binary, 0, size(Binary), [])}, Data)};
+            {noreply, reply({ok, unpack(Binary, 0, ?WORD(size(Binary)), [])}, Data)};
         false ->
             {noreply, Data}
     end;
@@ -193,16 +195,16 @@ unpack(Binary, Start, Length, List) ->
     %% ~/include/util/SimpleProperties.hpp: SimpleProperties::ValueType
     %% ~/src/common/util/SimpleProperties.cpp: SimpleProperties::Reader::readValue/0
     %%
-    <<W:?WORD(1)/big-unit:8>> = binary_part(Binary, Start, ?WORD(1)), % << ntohl = big
+    W = bin_to_word(Binary, Start, 1, big),
     {T, N} = case {W band 16#ffff, W bsr 16} of
                  {K, 0} -> % Uint32Value
-                     <<V:?WORD(1)/big-unit:8>> = binary_part(Binary, Start + ?WORD(1), ?WORD(1)),
-                     {{K, V}, ?WORD(2)};
+                     V = bin_to_word(Binary, Start + 1, 1, big),
+                     {{K, V}, 2};
                  {K, 1} -> % StringValue
-                     <<L:?WORD(1)/big-unit:8>> = binary_part(Binary, Start + ?WORD(1), ?WORD(1)),
-                     {{K, binary_part(Binary, Start + ?WORD(2), L - 1)}, ?WORD(2 + ((L + 3) bsr 2))};
+                     L = bin_to_word(Binary, Start + 1, 1, big),
+                     {{K, binary_part(Binary, ?BYTE(Start + 2), L - 1)}, 2 + ?WORD(L + 3)};
                  {K, 2} -> % BinaryValue
-                     <<L:?WORD(1)/big-unit:8>> = binary_part(Binary, Start + ?WORD(1), ?WORD(1)),
-                     {{K, binary_part(Binary, Start + ?WORD(2), L)}, ?WORD(2 + ((L + 3) bsr 2))}
+                     L = bin_to_word(Binary, Start + 1, 1, big),
+                     {{K, binary_part(Binary, ?BYTE(Start + 2), L)}, 2 + ?WORD(L + 3)}
              end,
     unpack(Binary, Start + N, Length - N, [T|List]).

@@ -114,7 +114,8 @@
 
 -define(LS, $\n).
 
--define(WORD(N), ((N) * 4)).
+-define(BYTE(N), ((N) bsl 2)).
+-define(WORD(N), ((N) bsr 2)).
 
 -define(NUMBER_TO_REF(Block, Node), ((Block bsl 16) bor Node)).
 

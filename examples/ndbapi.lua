@@ -28,7 +28,7 @@ local BLOCK_NO = {
    [0x0108] = "DBSPJ",
    [0x0109] = "THRMAN",
    [0x010a] = "TRPMAN",
-   --  4f7  = ?
+   --  4f7  = lqhInstanceKey?
    [0x07ff] = "API_PACKED",
    [0x0fa2] = "API_CLUSTERMGR"
 }
@@ -107,8 +107,8 @@ fields.message_length     = ProtoField.uint16("ndbapi.message_length",     "mess
 fields.fragment_info      = ProtoField.uint8 ("ndbapi.fragment_info",      "fragment_info",      base.HEX)
 fields.prio               = ProtoField.uint8 ("ndbapi.prio",               "prio",               base.DEC)
 fields.version_id         = ProtoField.uint8 ("ndbapi.version_id",         "version_id",         base.HEX)
-fields.trace              = ProtoField.uint16("ndbapi.trace",              "trace",              base.HEX)
-fields.signal_data_length = ProtoField.uint16("ndbapi.signal_data_length", "signal_data_length", base.DEC)
+fields.trace              = ProtoField.uint8 ("ndbapi.trace",              "trace",              base.HEX)
+fields.signal_data_length = ProtoField.uint8 ("ndbapi.signal_data_length", "signal_data_length", base.DEC)
 fields.sections_length    = ProtoField.uint8 ("ndbapi.sections_length",    "sections_length",    base.DEC)
 fields.signal_id          = ProtoField.uint8 ("ndbapi.signal_id",          "signal_id",          base.HEX)
 fields.signal_data        = ProtoField.none  ("ndbapi.signal_data",        "signal_data")
@@ -148,7 +148,7 @@ function proto.dissector(tvb, pinfo, tree)
 
       local x = bit.rshift(bit.band(w1, 0x7c000000), 26) -- signal_data_length
       if x > 0 then
-         local d = t:add(fields.signal_data, tvb(n, tvb:len() - n))
+         local d = t:add(fields.signal_data)
          for i = 0, x - 1 do
             d:add(string.format("[%2d]", i), string.format("0x%08x", word(tvb(n + i * 4, 4), b)))
          end

@@ -2,6 +2,8 @@
 
 -include("internal.hrl").
 
+-import(ndbepi_util, [part/2]).
+
 %% -- private --
 -export([start_link/4]).
 -export([call/2, call/3]).
@@ -22,7 +24,7 @@
     {error, Reason :: term()}.
 
 -callback handle_call(Request :: term(), NodeId :: node_id(), BlockNo :: block_no(),
-                      Default :: signal(), From :: {pid(), term()}, Data :: term()) ->
+                      Signal :: signal(), From :: {pid(), term()}, Data :: term()) ->
     {noreply, Args :: [term()], NewData :: term()}|
     {stop, Reason :: term(), NewData :: term()}.
 
@@ -41,18 +43,20 @@
           data      :: undefined|term()
          }).
 
+-type(request() :: {atom(), [term()], undefined|node_id()}).
+
 %% == private ==
 
--spec start_link(module(), node_id(), pos_integer(), [term()]) -> {ok, pid()}|{error, _}.
+-spec start_link(module(), node_id(), block_no(), [term()]) -> {ok, pid()}|{error, _}.
 start_link(Module, NodeId, BlockNo, Options) ->
     gen_server:start_link(?MODULE, [Module, NodeId, BlockNo], Options).
 
 
--spec call(pid(), term()) -> ok.
+-spec call(pid(), request()) -> term().
 call(Pid, Request) ->
-    call(Pid, Request, timer:seconds(10)).
+    gen_server:call(Pid, Request).
 
--spec call(pid(), term(), timeout()) -> ok.
+-spec call(pid(), request(), timeout()) -> term().
 call(Pid, Request, Timeout) ->
     gen_server:call(Pid, Request, Timeout).
 
@@ -79,7 +83,7 @@ handle_info({#signal{fragment_info=3}=S, Binary}, State) ->
     {L, M} = maps:take(key(S), State#state.fragments),
     received(S, list_to_binary(lists:reverse([fragment(Binary)|L])), State#state{fragments = M});
 handle_info({#signal{fragment_info=2}=S, Binary}, State) ->
-    M = maps:update_with(key(S), fun(V) -> [fragment(Binary)|V] end, State#state.fragments),
+    M = maps:update_with(key(S), fun(L) -> [fragment(Binary)|L] end, State#state.fragments),
     {noreply, State#state{fragments = M}};
 handle_info({#signal{fragment_info=1}=S, Binary}, State) ->
     M = maps:put(key(S), [fragment(Binary)], State#state.fragments),
@@ -129,7 +133,7 @@ found(#state{block_no=B, ets=E}=X) ->
         true ->
             configured(X#state{tab = baseline_ets:tab(E)});
         false ->
-            {stop, ebusy} % -> retry
+            {stop, ebusy, X}
     end.
 
 configured(#state{module = M}=X) ->
@@ -141,17 +145,14 @@ configured(#state{module = M}=X) ->
     end.
 
 
-ready({_, _, Z}=A, From, #state{module=M, node_id=N, block_no=B, tab=T, data=D}=X) ->
-    try select(T, Z, B) of
-        {_, P, Y} ->
-            io:format("9~n"),
-            case M:handle_call(A, N, B, Y, From, D) of
+ready({A, L, R}, From, #state{module=M, node_id=N, block_no=B, tab=T, data=D}=X) ->
+    try select(T, R, B) of
+        {_, P, S} ->
+            case M:handle_call({A, L}, N, B, S, From, D) of
                 {noreply, Args, Data} ->
-                    io:format("9-1~n"),
                     ok = apply(ndbepi_transporter, cast, [P|Args]),
                     {noreply, X#state{data = Data}};
                 {error, Reason, Data} ->
-                    io:format("9-2~n"),
                     {stop, Reason, X#state{data = Data}}
             end
     catch
@@ -169,9 +170,11 @@ received(Signal, Binary, #state{module=M, data=D}=S) ->
     end.
 
 
+fragment(Binary) ->
+    part(Binary, 1).
 
-
-
+key(#signal{signal_data_length=L, signal_data=D}) ->
+    lists:nth(L, D).
 
 select(Tab, undefined, BlockNo) ->
     case ets:select(Tab, [{{'$1', '_', '_'}, [], ['$_']}]) of
@@ -187,10 +190,3 @@ select(Tab, NodeId, BlockNo) ->
         List ->
             hd(List)
     end.
-
-key(#signal{signal_data_length=L, signal_data=D}) ->
-    lists:nth(L, D).
-
-fragment(Binary) ->
-    {_, B} = split_binary(Binary, ?WORD(1)),  % element(1, _) = size(B)
-    B.

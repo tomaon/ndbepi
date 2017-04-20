@@ -3,11 +3,10 @@
 -include("internal.hrl").
 
 -import(ndbepi_util, [endianness/1,
-                      part/3, split/2, word/1,
+                      part/3, split/2,
                       bin_to_word/4, bin_to_words/5,
                       words_to_bin/2,
-                      checksum/1, checksum/5
-                     ]).
+                      checksum/1, checksum/5]).
 
 %% -- private --
 -export([start_link/2]).
@@ -35,31 +34,29 @@
 
 %% -- ~/src/common/transporter/TransporterInternalDefinitions.hpp --
 
-%%  b : Byte order        ,  1 * 3
-%%  c : Checksum included ,  1
-%%  d : Signal data length,  5
-%%  f : FragmentInfo1     ,  1
-%%  g : GSN               , 16
-%%  h : FragmentInfo2     ,  1
-%%  i : Signal id included,  1
-%%  m : Message length    , 16
-%%  n : No of segments    ,  2
-%%  p : Prio              ,  2
-%%  r : Recievers block no, 16
-%%  s : Senders block no  , 16
-%%  t : Trace             ,  6
-%%  v : Version id        ,  4
-%% (z): Compression       ,  1
+%%
+%%  b : Byte order           1 * 3
+%%  c : Checksum included    1
+%%  d : Signal data length   5
+%%  f : FragmentInfo1        1
+%%  g : GSN                 16
+%%  h : FragmentInfo2        1
+%%  i : Signal id included   1
+%%  m : Message length      16
+%%  n : No of segments       2
+%%  p : Prio                 2
+%%  r : Recievers block no  16
+%%  s : Senders block no    16
+%%  t : Trace                6
+%%  v : Version id           4
+%% (z): Compression          1
 %%
 %% Protocol6  3          2          1          0
 %%           10987654 32109876 54321098 76543210
 %% - Word1 - 0dddddhb mmmmmmmm mmmmmmmm bppczifb
-%%           00000000 00000000 00000000 00000000  0x00000000
 %% - Word2 - ....nntt ttttvvvv gggggggg gggggggg
-%%           00000000 00000000 00000000 00000000  0x00000000
 %% - Word3 - rrrrrrrr rrrrrrrr ssssssss ssssssss
-%%           00000000 00000000 00000000 00000000  0x00000000
-
+%%
 -define(WORD1_MASK_BYTE_ORDER_1,        16#00000001).
 -define(WORD1_MASK_FRAGMENT_INFO_1,     16#00000002).
 -define(WORD1_MASK_SIGNAL_ID_INCLUDED,  16#00000004).
@@ -104,7 +101,6 @@
 
 %% -- other --
 -define(GET(Word, Shift, Mask), ((Word band Mask) bsr Shift)).
-
 
 -record(state, {
           local       :: node_id(),
@@ -291,7 +287,7 @@ interrupted(#state{socket=S, regreq=R}=X) ->
 
 
 received(Binary, State) ->
-    received(Binary, word(size(Binary)), State).
+    received(Binary, ?WORD(size(Binary)), State).
 
 received(Binary, Size, State)
   when Size >= 3 ->
@@ -304,7 +300,7 @@ received(Binary, Size, #signal{message_length=M}=S, State)
     {B, R} = split(Binary, M),
     accepted(B, S, State#state{rest = R});
 received(Binary, _Size, #signal{message_length=M}, State) ->
-    case M =:= 0 orelse M > word(?MAX_RECV_MESSAGE_BYTESIZE) of
+    case M =:= 0 orelse M > ?WORD(?MAX_RECV_MESSAGE_BYTESIZE) of
         false ->
             {noreply, State#state{rest = Binary}};
         true ->
@@ -372,7 +368,7 @@ sections_to_words([H|T], Endianness, List1, List2) ->
     L = case H of
             H when is_binary(H) ->
                 B = <<H/binary, 0, 0, 0, 0>>,
-                bin_to_words(B, 0, word(size(B)), 1, Endianness)
+                bin_to_words(B, 0, ?WORD(size(B)), 1, Endianness)
         end,
     sections_to_words(T, Endianness, [length(L)|List1], [L|List2]).
 

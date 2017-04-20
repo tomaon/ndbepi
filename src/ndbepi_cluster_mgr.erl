@@ -10,8 +10,7 @@
          handle_call/6, handle_info/3]).
 
 %% -- internal --
--record(data, {
-         }).
+-record(data, {}).
 
 %% == private ==
 
@@ -30,7 +29,7 @@ terminate(_Reason, Data) ->
 code_change(_OldVsn, Data, _Extra) ->
     {ok, Data}.
 
-handle_call(_Request, _NodeId, _BlockNo, _Default, _From, Data) ->
+handle_call(_Request, _NodeId, _BlockNo, _Signal, _From, Data) ->
     {stop, enosys, Data}.
 
 handle_info(Signal, Binary, Data) ->
