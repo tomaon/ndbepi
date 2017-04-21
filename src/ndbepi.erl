@@ -48,7 +48,7 @@ connect(Pid, BlockNo, Retry) ->
         {ok, Child, _Info} ->
             {ok, Child};
         {error, ebusy} ->
-            connect(Pid, BlockNo + 1, Retry - 1); % TODO
+            connect(Pid, (BlockNo + 17) rem ?MAX_API_BLOCK_NO, Retry - 1);
         {error, Reason} ->
             {error, Reason}
     end.

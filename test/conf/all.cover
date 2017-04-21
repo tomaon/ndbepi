@@ -4,7 +4,9 @@
              ndbepi_app,
              ndbepi_cluster_mgr,
              ndbepi_connection,
-             ndbepi_gen_block,
+             ndbepi_dictionary,
+             ndbepi_gen_block1,
+             ndbepi_gen_block2,
              ndbepi_transporter,
              ndbepi_util
             ]}.

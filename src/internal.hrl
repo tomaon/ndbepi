@@ -110,6 +110,8 @@
 -define(MAX_GSN,                          782).
 
 %% -- other --
+-define(API_DOCTIONARY,   (?MIN_API_BLOCK_NO + 1)). % 32768
+
 -define(MAX_API_BLOCK_NO, 16#ffff).
 
 -define(LS, $\n).

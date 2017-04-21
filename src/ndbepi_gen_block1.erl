@@ -1,4 +1,4 @@
--module(ndbepi_gen_block).
+-module(ndbepi_gen_block1).
 
 -include("internal.hrl").
 
@@ -122,7 +122,7 @@ setup(Args) ->
 initialized([Module, NodeId, BlockNo]) ->
     case baseline_app:find(ndbepi_sup, ndbepi_ets, 100, 10) of
         undefined ->
-            {stop, not_found};
+            {stop, not_found, undefined};
         Pid ->
             found(#state{module = Module, node_id = NodeId, block_no = BlockNo,
                          fragments = maps:new(), ets = Pid})

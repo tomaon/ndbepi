@@ -8,7 +8,7 @@
 -export([start_link/2]).
 -export([call/1]).
 
--behaviour(ndbepi_gen_block).
+-behaviour(ndbepi_gen_block2).
 -export([init/0, terminate/2, code_change/3,
          handle_call/6, handle_info/3]).
 
@@ -22,21 +22,21 @@
 
 -spec start_link(node_id(), pos_integer()) -> {ok, pid()}|{error, _}.
 start_link(NodeId, BlockNo) ->
-    ndbepi_gen_block:start_link(?MODULE, NodeId, BlockNo, []).
+    ndbepi_gen_block2:start_link(?MODULE, NodeId, BlockNo, []).
 
 
 call(Pid) ->
-    {ok, L1} = ndbepi_gen_block:call(Pid, {get_table_by_name, [<<"test/def/city">>], undefined}),
+    {ok, L1} = ndbepi_gen_block2:call(Pid, {get_table_by_name, [<<"test/def/city">>], undefined}),
     [io:format("~p~n", [E]) || E <- L1 ], io:format("~n~n"),
-    {ok, L2} = ndbepi_gen_block:call(Pid, {get_table_by_id, [1], undefined}),
+    {ok, L2} = ndbepi_gen_block2:call(Pid, {get_table_by_id, [1], undefined}),
     io:format("~p~n", [length(L2)]),
-    {ok, I3} = ndbepi_gen_block:call(Pid, {startTransaction, [0], undefined}),
+    {ok, I3} = ndbepi_gen_block2:call(Pid, {startTransaction, [0], undefined}),
     io:format("~p~n~n", [I3]),
-    ok = ndbepi_gen_block:call(Pid, {closeTransaction, [I3], undefined}).
+    ok = ndbepi_gen_block2:call(Pid, {closeTransaction, [I3], undefined}).
 
 %% ndbepi_connection:call(element(2, ndbepi:connect())).
 
-%% -- behaviour: ndbepi_gen_block --
+%% -- behaviour: ndbepi_gen_block2 --
 
 init() ->
     setup().

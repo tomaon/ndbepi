@@ -1,4 +1,4 @@
--module(ndbepi_cluster_mgr).
+-module(ndbepi_dictionary).
 
 -include("internal.hrl").
 
@@ -44,22 +44,6 @@ setup() ->
     {ok, #data{}}.
 
 
-received(#signal{gsn=?GSN_API_REGCONF}, <<>>, Data) ->
-    %%
-    %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegConf
-    %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGCONF/2
-    %%
-    {noreply, Data};
-received(#signal{gsn=?GSN_API_REGREF}=S, <<>>, Data) ->
-    %%
-    %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegRef
-    %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGREF/1
-    %%
-    Reason = case lists:nth(3, S#signal.signal_data) of
-                 1 -> <<"WrongType">>;
-                 2 -> <<"UnsupportedVersion">>
-             end,
-    {stop, {shutdown, Reason}, Data};
 received(Signal, Binary, Data) ->
     ok = error_logger:warning_msg("[~p:~p] ~p,~p~n", [?MODULE, self(), Signal, Binary]),
     {noreply, Data}.

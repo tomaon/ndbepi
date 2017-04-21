@@ -105,7 +105,22 @@ get_childspecs(Env, NodeId, Config) ->
        transient,
        5000,
        worker,
-       [ndbepi_gen_block]
+       [ndbepi_gen_block1]
+     },
+     {
+       ndbepi_dictionary,
+       {
+         ndbepi_dictionary,
+         start_link,
+         [
+          NodeId,
+          ?API_DOCTIONARY
+         ]
+       },
+       transient,
+       5000,
+       worker,
+       [ndbepi_gen_block1]
      },
      {
        ndbepi_connections,
@@ -129,7 +144,7 @@ get_childspecs(Env, NodeId, Config) ->
                temporary,
                5000,
                worker,
-               [ndbepi_gen_block]
+               [ndbepi_gen_block2]
              }
             ]
           }
