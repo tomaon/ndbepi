@@ -6,7 +6,7 @@
 
 %% -- private --
 -export([start_link/4]).
--export([call/2, call/3]).
+-export([call/2, call/3, cast/2]).
 
 -behaviour(gen_server).
 -export([init/1, terminate/2, code_change/3,
@@ -24,11 +24,12 @@
     {error, Reason :: term()}.
 
 -callback handle_call(Request :: term(), NodeId :: node_id(), BlockNo :: block_no(),
-                      Signal :: signal(), From :: {pid(), term()}, Data :: term()) ->
+                      Signal :: signal(), Data :: term()) ->
     {noreply, Args :: [term()], NewData :: term()}|
     {stop, Reason :: term(), NewData :: term()}.
 
 -callback handle_info(Signal :: signal(), Binary :: binary(), Data :: term()) ->
+    {reply, Reply :: term(), NewData :: term()}|
     {noreply, NewData :: term()}|
     {stop, Reason :: term(), NewData :: term()}.
 
@@ -36,11 +37,12 @@
 -record(state, {
           module    :: module(),
           node_id   :: node_id(),
-          block_no  :: pos_integer(),
+          block_no  :: block_no(),
           fragments :: map(),
           ets       :: undefined|pid(),
           tab       :: undefined|ets:tab(),
-          data      :: undefined|term()
+          data      :: undefined|term(),
+          from      :: undefined|{pid(), term()}
          }).
 
 -type(request() :: {atom(), [term()], undefined|node_id()}).
@@ -60,6 +62,10 @@ call(Pid, Request) ->
 call(Pid, Request, Timeout) ->
     gen_server:call(Pid, Request, Timeout).
 
+-spec cast(pid(), request()) -> ok.
+cast(Pid, Request) ->
+    gen_server:cast(Pid, Request).
+
 %% -- behaviour: gen_server --
 
 init(Args) ->
@@ -74,19 +80,19 @@ code_change(OldVsn, State, Extra) ->
 handle_call(Request, From, State) ->
     ready(Request, From, State).
 
-handle_cast(_Request, State) ->
-    {stop, enosys, State}.
+handle_cast(Request, State) ->
+    ready(Request, undefined, State).
 
 handle_info({#signal{fragment_info=0}=S, Binary}, State) ->
     received(S, Binary, State);
 handle_info({#signal{fragment_info=3}=S, Binary}, State) ->
     {L, M} = maps:take(key(S), State#state.fragments),
-    received(S, list_to_binary(lists:reverse([fragment(Binary)|L])), State#state{fragments = M});
+    received(S, list_to_binary(lists:reverse([part(Binary, 1)|L])), State#state{fragments = M});
 handle_info({#signal{fragment_info=2}=S, Binary}, State) ->
-    M = maps:update_with(key(S), fun(L) -> [fragment(Binary)|L] end, State#state.fragments),
+    M = maps:update_with(key(S), fun(L) -> [part(Binary, 1)|L] end, State#state.fragments),
     {noreply, State#state{fragments = M}};
 handle_info({#signal{fragment_info=1}=S, Binary}, State) ->
-    M = maps:put(key(S), [fragment(Binary)], State#state.fragments),
+    M = maps:put(key(S), [part(Binary, 1)], State#state.fragments),
     {noreply, State#state{fragments = M}};
 handle_info(timeout, Args) ->
     initialized(Args);
@@ -136,7 +142,7 @@ found(#state{block_no=B, ets=E}=X) ->
             {stop, ebusy, X}
     end.
 
-configured(#state{module = M}=X) ->
+configured(#state{module=M}=X) ->
     case M:init() of
         {ok, Data} ->
             {noreply, X#state{data = Data}};
@@ -145,13 +151,13 @@ configured(#state{module = M}=X) ->
     end.
 
 
-ready({A, L, R}, From, #state{module=M, node_id=N, block_no=B, tab=T, data=D}=X) ->
-    try select(T, R, B) of
+ready({A, L, K}, From, #state{module=M, node_id=N, block_no=B, tab=T, data=D}=X) ->
+    try select(T, K, B) of
         {_, P, S} ->
-            case M:handle_call({A, L}, N, B, S, From, D) of
+            case M:handle_call({A, L}, N, B, S, D) of
                 {noreply, Args, Data} ->
                     ok = apply(ndbepi_transporter, cast, [P|Args]),
-                    {noreply, X#state{data = Data}};
+                    {noreply, X#state{data = Data, from = From}};
                 {error, Reason, Data} ->
                     {stop, Reason, X#state{data = Data}}
             end
@@ -161,17 +167,17 @@ ready({A, L, R}, From, #state{module=M, node_id=N, block_no=B, tab=T, data=D}=X)
     end.
 
 
-received(Signal, Binary, #state{module=M, data=D}=S) ->
+received(Signal, Binary, #state{module=M, data=D}=X) ->
     case M:handle_info(Signal, Binary, D) of
+        {reply, Reply, Data} ->
+            _ = gen_server:reply(X#state.from, Reply),
+            {noreply, X#state{data = Data, from = undefined}};
         {noreply, Data} ->
-            {noreply, S#state{data = Data}};
+            {noreply, X#state{data = Data, from = undefined}};
         {stop, Reason, Data} ->
-            {stop, Reason, S#state{data = Data}}
+            {stop, Reason, X#state{data = Data, from = undefined}}
     end.
 
-
-fragment(Binary) ->
-    part(Binary, 1).
 
 key(#signal{signal_data_length=L, signal_data=D}) ->
     lists:nth(L, D).

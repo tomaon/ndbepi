@@ -7,10 +7,7 @@
 
 -behaviour(ndbepi_gen_block1).
 -export([init/0, terminate/2, code_change/3,
-         handle_call/6, handle_info/3]).
-
-%% -- internal --
--record(data, {}).
+         handle_call/5, handle_info/3]).
 
 %% == private ==
 
@@ -21,45 +18,33 @@ start_link(NodeId, BlockNo) ->
 %% -- behaviour: ndbepi_gen_block1 --
 
 init() ->
-    setup().
+    {ok, undefined}.
 
-terminate(_Reason, Data) ->
-    cleanup(Data).
+terminate(_Reason, _Data) ->
+    ok.
 
 code_change(_OldVsn, Data, _Extra) ->
     {ok, Data}.
 
-handle_call(_Request, _NodeId, _BlockNo, _Signal, _From, Data) ->
+handle_call(_Request, _NodeId, _BlockNo, _Signal, Data) ->
     {stop, enosys, Data}.
 
-handle_info(Signal, Binary, Data) ->
-    received(Signal, Binary, Data).
-
-%% == internal ==
-
-cleanup(_) ->
-    ok.
-
-setup() ->
-    {ok, #data{}}.
-
-
-received(#signal{gsn=?GSN_API_REGCONF}, <<>>, Data) ->
+handle_info(#signal{gsn=?GSN_API_REGCONF}, <<>>, Data) ->
     %%
     %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegConf
     %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGCONF/2
     %%
     {noreply, Data};
-received(#signal{gsn=?GSN_API_REGREF}=S, <<>>, Data) ->
+handle_info(#signal{gsn=?GSN_API_REGREF, signal_data=D}, <<>>, Data) ->
     %%
     %% ~/include/kernel/signaldata/ApiRegSignalData.hpp: ApiRegRef
     %% ~/src/ndbapi/ClusterMgr.cpp: ClusterMgr::execAPI_REGREF/1
     %%
-    Reason = case lists:nth(3, S#signal.signal_data) of
+    Reason = case lists:nth(3, D) of
                  1 -> <<"WrongType">>;
                  2 -> <<"UnsupportedVersion">>
              end,
     {stop, {shutdown, Reason}, Data};
-received(Signal, Binary, Data) ->
+handle_info(Signal, Binary, Data) ->
     ok = error_logger:warning_msg("[~p:~p] ~p,~p~n", [?MODULE, self(), Signal, Binary]),
     {noreply, Data}.
