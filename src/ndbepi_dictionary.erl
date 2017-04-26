@@ -145,3 +145,27 @@ unpack(Binary, Start, Length, List) ->
                      {{K, binary_part(Binary, ?BYTE(Start + 2), L)}, 2 + ?WORD(L + 3)}
              end,
     unpack(Binary, Start + N, Length - N, [T|List]).
+
+
+%% names() ->
+%%     [
+%%      %%{?ATTRIBUTE_NAME, <<>>},
+%%      {?ATTRIBUTE_ID, <<"AttributeId">>},
+%%      {?ATTRIBUTE_TYPE, <<"AttributeType">>},
+%%      {?ATTRIBUTE_SIZE, <<"AttributeSize">>},
+%%      {?ATTRIBUTE_ARRAY_SIZE, <<"AttributeArraySize">>},
+%%      {?ATTRIBUTE_KEY_FLAG, <<"AttributeKeyFlag">>},
+%%      {?ATTRIBUTE_STORAGE_TYPE, <<"AttributeStorageType">>},
+%%      {?ATTRIBUTE_NULLABLE_FLAG, <<"AttributeNullableFlag">>},
+%%      %%{?ATTRIBUTE_DYNAMIC, <<>>},
+%%      {?ATTRIBUTE_D_KEY, <<"AttributeDKey">>},
+%%      %% AttributeGroup
+%%      {?ATTRIBUTE_EXT_TYPE, <<"AttributeExtType">>},
+%%      {?ATTRIBUTE_EXT_PRECISION, <<"AttributeExtPrecision">>},
+%%      {?ATTRIBUTE_EXT_SCALE, <<"AttributeExtScale">>},
+%%      {?ATTRIBUTE_EXT_LENGTH, <<"AttributeExtLength">>},
+%%      {?ATTRIBUTE_AUTO_INCREMENT, <<"AttributeAutoIncrement">>},
+%%      {?ATTRIBUTE_ARRAY_TYPE, <<"AttributeArrayType">>},
+%%      {?ATTRIBUTE_DEFAULT_VALUE_LEN, <<"AttributeDefaultValueLen">>},
+%%      {?ATTRIBUTE_DEFAULT_VALUE, <<"AttributeDefaultValue">>}
+%%     ].
