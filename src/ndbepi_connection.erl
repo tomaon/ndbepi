@@ -51,6 +51,7 @@ handle_info(#signal{gsn=?GSN_TCSEIZECONF}=S, <<>>, Data) ->
     %%
     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZECONF/1
     %%
+    io:format("~p~n", [S]),
     {reply, {ok, lists:nth(2, S#signal.signal_data)}, Data};
 handle_info(#signal{gsn=?GSN_TCSEIZEREF}=S, <<>>, Data) ->
     %%
@@ -63,14 +64,37 @@ handle_info(Signal, Binary, Data) ->
 
 %% == internal ==
 
+%% 00f50001
+
+%% Ndb.cpp : Ndb::startTransaction/4 (NdbRecord/char)
+%% - computeHash
+%% - startTransaction/2 (Table/PartitionId)
+
+%% Ndb.cpp : Ndb::startTransaction/4 (Table/Key_part_ptr)
+%% - computeHash
+%% - startTransaction/2 (Table/partitionId)
+
+%% Ndb.cpp : Ndb::startTransaction/4 (Table/partitionId)
+%% - table + partitionId => node_id
+%% - startTransactionLocal(0, node, 0) % PRIORITY! node instance?
+
+%% NDb.cpp : Ndb::startTransactionLocal/3
+%% - doConnect => NdbTransaction!
+%% - - NDB_connect : GSN_TCSEIZEREQ
+%% - - getConnectedNdbTransaction (pool) => NdbTransaction
+%% - tFirstTransId, aPriority > NdbTransaction
+
 signal({startTransaction, [Instance]}, NodeId, BlockNo, Default) ->
+    %%
+    %% ~/src/ndbapi/src/Ndb.cpp: Ndb::NDB_connect/2
+    %%
     [
      Default#signal{gsn = ?GSN_TCSEIZEREQ,
                     send_block_no = BlockNo,
                     recv_block_no = ?DBTC,
                     signal_data_length = 3,
                     signal_data = [
-                                   999,
+                                   999, % pool.index
                                    ?NUMBER_TO_REF(BlockNo, NodeId),
                                    Instance
                                   ],
@@ -94,3 +118,44 @@ signal({closeTransaction, [Id]}, NodeId, BlockNo, Default) ->
                     sections_length = 0},
      []
     ].
+
+%% NdbTransaction.cpp : NdbTransaction::getNdbOperation/2
+%% % NdbOperation.cpp : NdbOperation::init/2
+%% %  GSN_TCKEYREQ
+
+%% NdbTransaction.cpp : NdbTransaction::getNdbScanOperation/1
+%% % NdbScanOperation.cpp : NdbScanOperation::init/2
+%% % - NdbOperation::init/2 ?!
+%% % - Ndb.cpp: Ndb::hupp/1 ?!
+%% % - - startTransactionLocal ?!
+
+%% NdbOperationDefine.cpp : NdbOperation::readTuple/1, LM_Read
+%% - NdbOperation::readTuple - NdbOperationDefine.cpp
+
+%% NdbOperation.cpp : NdbOperation::equal/2
+%% - table.gtColumn(attrName|attrId) => col
+%% - NdbOperation::equal_impl/2 - NdbOperationSearch.cpp
+
+%% NdbOperation.cpp : NdbOperation::getValue/2
+%% - NdbOperation::getValue_impl/2 - NdbOperationSearch.cpp
+
+%% NdbTransaction.cpp : NdbTransaction::execute/3
+%% - executeNoBlobs/3  NoCommit,DefaultAbortOption,0
+%% - - executeAsynchPrepare/4  NoCommit,NULL,NULL,DefaultAbortOption
+%% - - - NdbQueryImpl::prepareSend/0 NdbQueryOperation.cpp
+%% - - - - NdbQueryOperationImpl::prepareAttrInfo/1 NdbQueryOperation.cpp
+%% - - - - - NdbQueryOperationImpl::serializeProject/1 NdbQueryOperation.cpp
+%%
+%% - - Ndb::sendPollNdb/3 Ndbif.cpp
+%% - - - Ndb::sendPrepTrans/1 Ndbif.cpp
+%% - - - - NdbTransaction::doSend/0 NdbTransaction.cpp
+%%
+%% - - - - - NdbQueryImpl::doSend/2 NdbQueryOperation.cpp
+%%             (scan:scanTabReq)
+%% - - - - - - NdbImpl::sendFragmentedSignal/4 NdbImpl.hpp
+%%            (lookup:tcKeyReq)
+%% - - - - - - NdbImpl::sendSignal/4 NdbImpl.hpp
+%%
+%% - - - - - NdbOperation::doSend/2 NdbOperationExec.cpp
+%% - - - - - - NdbOperation::doSendKeyReq/4 NdbOperationExec.cpp
+%% - - - - - - - NdbImpl::sendSignal/4 NdbImpl.hpop
