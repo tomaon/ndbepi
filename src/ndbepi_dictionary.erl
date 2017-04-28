@@ -1,6 +1,7 @@
 -module(ndbepi_dictionary).
 
 -include("internal.hrl").
+-include("../include/ndbepi.hrl").
 
 -import(ndbepi_util, [bin_to_word/4]).
 
@@ -231,7 +232,7 @@ x2() ->
      {?HASH_MAP, <<"HashMap">>},
      {?FOREIGN_KEY, <<"ForeignKey">>},
      {?FK_PARENT_TRIGGER, <<"FKParentTrigger">>},
-     {?TRIGGER, <<"FKChildTrigger">>}
+     {?FK_CHILD_TRIGGER, <<"FKChildTrigger">>}
     ].
 
 %% index : Version, Base table, Number of attributes, Logging, Index (type|status)

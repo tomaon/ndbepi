@@ -21,7 +21,7 @@
 %%efine(TABLE_NAME,                     1). % m_internalName
 %%efine(TABLE_ID,                       2). % m_id
 -define(TABLE_VERSION,                  3). % m_version
-%%efine(TABLE_LOGGED_FLAG,              4). % m_logging
+-define(TABLE_LOGGED_FLAG,              4). % m_logging
 %%efine(NO_OF_KEY_ATTR,                 5).
 %%efine(NO_OF_ATTRIBUTES,               6).
 %%efine(NO_OF_NULLABLE,                 7).
@@ -82,7 +82,7 @@
 %%efine(ATTRIBUTE_NAME,              1000). % m_name
 -define(ATTRIBUTE_ID,                1001). % m_attrId
 -define(ATTRIBUTE_TYPE,              1002).
--define(ATTRIBUTE_SIZE,              1003). % m_orgAttrSize, m_attrSize
+-define(ATTRIBUTE_SIZE,              1003). % m_orgAttrSize, m_attrSize (0|3|4|5|6|7)
 %%                                   1004
 -define(ATTRIBUTE_ARRAY_SIZE,        1005). % m_arraySize
 -define(ATTRIBUTE_KEY_FLAG,          1006). % m_pk
