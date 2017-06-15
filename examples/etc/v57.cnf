@@ -7,7 +7,6 @@
 #log_error = ..
  lower_case_table_names = 2 # 0: win=1,macos=2
  query_cache_size = 0
-#server_id = ..
  skip_networking
 #socket = ..
 
