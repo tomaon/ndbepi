@@ -1,0 +1,33 @@
+[mysqld]
+ autocommit = OFF
+ character_set_server = utf8mb4
+ collation_server = utf8mb4_bin
+#datadir = ..
+ explicit_defaults_for_timestamp
+#log_error = ..
+ lower_case_table_names = 2 # 0: win=1,macos=2
+ query_cache_size = 0
+#server_id = ..
+ skip_networking
+#socket = ..
+
+ innodb_autoinc_lock_mode = 2
+ innodb_doublewrite = OFF
+ innodb_flush_method = O_DIRECT
+ innodb_flush_neighbors = 0
+ innodb_io_capacity = 2000
+ innodb_io_capacity_max = 2000
+ innodb_random_read_ahead = ON
+ innodb_read_ahead_threshold = 0
+
+#ndbcluster = ...
+ ndb-cluster-connection-pool=1
+
+
+[client]
+ default_character_set = utf8mb4
+
+
+[mysql]
+ safe_updates
+ show_warnings
