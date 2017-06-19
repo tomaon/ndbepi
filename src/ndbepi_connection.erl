@@ -158,4 +158,5 @@ signal({closeTransaction, [Id]}, NodeId, BlockNo, Default) ->
 %%
 %% - - - - - NdbOperation::doSend/2 NdbOperationExec.cpp
 %% - - - - - - NdbOperation::doSendKeyReq/4 NdbOperationExec.cpp
+%% - - - - - - - NdbOperation::setRequestInfoTCKEYREQ/2 NdbOperationExec.cpp
 %% - - - - - - - NdbImpl::sendSignal/4 NdbImpl.hpop

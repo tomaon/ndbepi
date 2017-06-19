@@ -43,13 +43,13 @@
 %%  h : FragmentInfo2        1
 %%  i : Signal id included   1
 %%  m : Message length      16
-%%  n : No of segments       2
+%%  n : No of sections       2
 %%  p : Prio                 2
 %%  r : Recievers block no  16
 %%  s : Senders block no    16
 %%  t : Trace                6
 %%  v : Version id           4
-%% (z): Compression          1
+%% (z): Compressed           1
 %%
 %% Protocol6  3          2          1          0
 %%           10987654 32109876 54321098 76543210
