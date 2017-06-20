@@ -180,7 +180,7 @@ received(Signal, Binary, #state{module=M, data=D}=X) ->
 key(#signal{signal_data_length=L, signal_data=D}) ->
     lists:nth(L, D).
 
-select(Tab, undefined, BlockNo) ->
+select(Tab, 0, BlockNo) ->
     case ets:select(Tab, [{{'$1', '_', '_'}, [], ['$_']}]) of
         [] ->
             error(badarg);

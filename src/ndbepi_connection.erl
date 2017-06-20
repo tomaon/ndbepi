@@ -4,7 +4,7 @@
 
 %% -- private --
 -export([start_link/2]).
--export([call/0]).
+-export([connect/3, disconnect/2]).
 
 -behaviour(ndbepi_gen_block2).
 -export([init/0, terminate/2, code_change/3,
@@ -12,6 +12,7 @@
 
 %% -- internal --
 -record(data, {
+          id :: undefined|integer() % TODO
          }).
 
 %% == private ==
@@ -21,38 +22,37 @@ start_link(NodeId, BlockNo) ->
     ndbepi_gen_block2:start_link(?MODULE, NodeId, BlockNo, []).
 
 
-call() ->
-    {ok, P} = ndbepi:connect(),
-    {ok, I3} = ndbepi_gen_block2:call(P, {startTransaction, [0], undefined}),
-    io:format("~p~n~n", [I3]),
-    ok = ndbepi_gen_block2:call(P, {closeTransaction, [I3], undefined}).
+-spec connect(pid(), node_id(), integer()) -> ok|{error, _}.
+connect(Pid, NodeId, Instance) ->
+    ndbepi_gen_block2:call(Pid, {seize, [Instance], NodeId}).
 
-%% ndbepi_connection:call()).
+-spec disconnect(pid(), node_id()) -> ok|{error, _}.
+disconnect(Pid, NodeId) ->
+    ndbepi_gen_block2:call(Pid, {release, [], NodeId}).
 
 %% -- behaviour: ndbepi_gen_block2 --
 
 init() ->
     {ok, #data{}}.
 
-terminate(_Reason, _Data) ->
+terminate(_Reason, _Data) -> % TODO: id
     ok.
 
 code_change(_OldVsn, Data, _Extra) ->
     {ok, Data}.
 
 handle_call(Request, NodeId, BlockNo, Signal, Data) ->
-    {noreply, signal(Request, NodeId, BlockNo, Signal), Data}.
+    {noreply, signal(Request, NodeId, BlockNo, Signal, Data), Data}.
 
 handle_info(#signal{gsn=?GSN_TCRELEASECONF}, <<>>, Data) ->
-    {reply, ok, Data};
+    {reply, ok, Data#data{id = undefined}};
 handle_info(#signal{gsn=?GSN_TCSEIZECONF}=S, <<>>, Data) ->
     %%
     %% signal_data_length != 3 ?, TODO
     %%
     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZECONF/1
     %%
-    io:format("~p~n", [S]),
-    {reply, {ok, lists:nth(2, S#signal.signal_data)}, Data};
+    {reply, ok, Data#data{id = lists:nth(2, S#signal.signal_data)}};
 handle_info(#signal{gsn=?GSN_TCSEIZEREF}=S, <<>>, Data) ->
     %%
     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZEREF/1
@@ -84,7 +84,7 @@ handle_info(Signal, Binary, Data) ->
 %% - - getConnectedNdbTransaction (pool) => NdbTransaction
 %% - tFirstTransId, aPriority > NdbTransaction
 
-signal({startTransaction, [Instance]}, NodeId, BlockNo, Default) ->
+signal({seize, [Instance]}, NodeId, BlockNo, Default, _Data) ->
     %%
     %% ~/src/ndbapi/src/Ndb.cpp: Ndb::NDB_connect/2
     %%
@@ -94,16 +94,16 @@ signal({startTransaction, [Instance]}, NodeId, BlockNo, Default) ->
                     recv_block_no = ?DBTC,
                     signal_data_length = 3,
                     signal_data = [
-                                   999, % pool.index
+                                   0, % pool.index
                                    ?NUMBER_TO_REF(BlockNo, NodeId),
                                    Instance
                                   ],
                     sections_length = 0},
      []
     ];
-signal({closeTransaction, [Id]}, NodeId, BlockNo, Default) ->
+signal({release, []}, NodeId, BlockNo, Default, Data) ->
     %%
-    %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::execute/3
+    %% ~/src/ndbapi/Ndblist.cpp: Ndb::releaseConnectToNdb/1
     %%
     [
      Default#signal{gsn = ?GSN_TCRELEASEREQ,
@@ -111,9 +111,9 @@ signal({closeTransaction, [Id]}, NodeId, BlockNo, Default) ->
                     recv_block_no = ?DBTC,
                     signal_data_length = 3,
                     signal_data = [
-                                   Id,
+                                   Data#data.id,
                                    ?NUMBER_TO_REF(BlockNo, NodeId),
-                                   999
+                                   0
                                   ],
                     sections_length = 0},
      []
