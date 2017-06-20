@@ -1,0 +1,29 @@
+sysctl -a | grep space
+net.local.stream.recvspace: 8192
+net.local.stream.sendspace: 8192
+net.local.dgram.recvspace: 4096
+net.inet.tcp.sendspace: 131072      = SO_SNDBUF
+net.inet.tcp.recvspace: 131072      = SO_GETBUF
+net.inet.udp.recvspace: 196724
+net.inet.raw.recvspace: 8192
+net.stats.sendspace: 2048
+net.stats.recvspace: 8192
+
+[
+  {<<"TcpBind_INADDR_ANY">>,        0},
+  {<<"TCP_MAXSEG_SIZE">>,           0},
+  {<<"TCP_SND_BUF_SIZE">>,          0},
+  {<<"TCP_RCV_BUF_SIZE">>,          0},
+  {<<"ReceiveBufferMemory">>, 2097152}, % 131072*16
+  {<<"SendBufferMemory">>,    2097152}, % 131072*16
+  {<<"OverloadLimit">>,             0},
+  {<<"NodeIdServer">>,              1}, % = NodeId2
+  {<<"Group">>,                    55}, % ndb_optimized_node_selection, TODO
+  {<<"HostName1">>,   <<"localhost">>},
+  {<<"HostName2">>,   <<"localhost">>},
+  {<<"PortNumber">>,           -49405},
+  {<<"Checksum">>,                  0},
+  {<<"SendSignalId">>,              0},
+  {<<"NodeId1">>,                 201},
+  {<<"NodeId2">>,                   1}
+]

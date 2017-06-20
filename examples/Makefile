@@ -1,14 +1,19 @@
-MYSQL_HOME = /opt/mysql/debug/5.7.17-ndb-7.5.5
-MYSQL_CONF = $(PWD)/etc/v57.cnf
-MYSQL_BASE = /tmp/ndbepi
+#
+ID ?= 15700
+
+MYSQL_HOME ?= /opt/mysql/release/5.7.18-ndb-7.5.6
+MYSQL_CONF ?= $(PWD)/etc/v57.cnf
+MYSQL_BASE ?= /tmp/ndbepi
 
 SOPT  = --defaults-file=$(MYSQL_CONF)
 SOPT += --datadir=$(MYSQL_BASE)/data
 SOPT += --log-error=$(MYSQL_BASE)/mysqld.log
-SOPT += --socket=/tmp/mysqld.sock
+SOPT += --secure-file-priv=$(PWD)
+SOPT += --server-id=$(ID)
+SOPT += --socket=/tmp/mysqld.$(ID).sock
 
 COPT  = --defaults-file=$(MYSQL_CONF)
-COPT += --socket=/tmp/mysqld.sock
+COPT += --socket=/tmp/mysqld.$(ID).sock
 COPT += --user $(1)
 
 #
@@ -20,7 +25,7 @@ $(VERBOSE).SILENT:
 $(MYSQL_BASE):
 	mkdir -p $@ && $(MYSQL_HOME)/bin/mysqld $(SOPT) --initialize-insecure
 start: $(MYSQL_BASE)
-	$(MYSQL_HOME)/bin/mysqld $(SOPT) --ndbcluster &
+	$(MYSQL_HOME)/bin/mysqld $(SOPT) &
 
 ping processlist reload status variables version:
 	$(MYSQL_HOME)/bin/mysqladmin $(call COPT, root) $@
@@ -28,12 +33,11 @@ stop:
 	$(MYSQL_HOME)/bin/mysqladmin $(call COPT, root) shutdown
 
 run-root:
-	$(MYSQL_HOME)/bin/mysql $(call COPT, root)
+	$(MYSQL_HOME)/bin/mysql $(call COPT, root) --prompt="id:$(ID)> "
+run-%:
+	$(MYSQL_HOME)/bin/mysql $(call COPT, $*) -p $* --prompt="id:$(ID)> "
 
-clean: rm-data
-
-#
-rm-data:
+clean:
 	rm -rf $(MYSQL_BASE)
 
 #

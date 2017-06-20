@@ -7,6 +7,8 @@
 #log_error = ..
  lower_case_table_names = 2 # 0: win=1,macos=2
  query_cache_size = 0
+#secure-file-priv = ..
+#server-id = ..
  skip_networking
 #socket = ..
 
@@ -19,7 +21,7 @@
  innodb_random_read_ahead = ON
  innodb_read_ahead_threshold = 0
 
-#ndbcluster = ...
+ ndbcluster
  ndb-cluster-connection-pool=1
 
 
@@ -28,5 +30,6 @@
 
 
 [mysql]
+ local_infile = 1
  safe_updates
  show_warnings
