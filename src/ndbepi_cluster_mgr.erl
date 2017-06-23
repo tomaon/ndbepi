@@ -6,19 +6,25 @@
 -export([start_link/2]).
 
 -behaviour(ndbepi_gen_block1).
--export([init/0, terminate/2, code_change/3,
-         handle_call/5, handle_info/3]).
+-export([init/1, terminate/2, code_change/3,
+         handle_call/3, handle_info/3]).
+
+%% -- internal --
+-record(data, {
+          node_id  :: node_id(),
+          block_no :: block_no()
+         }).
 
 %% == private ==
 
--spec start_link(node_id(), pos_integer()) -> {ok, pid()}|{error, _}.
+-spec start_link(node_id(), block_no()) -> {ok, pid()}|{error, _}.
 start_link(NodeId, BlockNo) ->
-    ndbepi_gen_block1:start_link(?MODULE, NodeId, BlockNo, []).
+    ndbepi_gen_block1:start_link(?MODULE, BlockNo, [NodeId, BlockNo], []).
 
 %% -- behaviour: ndbepi_gen_block1 --
 
-init() ->
-    {ok, undefined}.
+init([NodeId, BlockNo]) ->
+    {ok, #data{node_id = NodeId, block_no = BlockNo}}.
 
 terminate(_Reason, _Data) ->
     ok.
@@ -26,7 +32,7 @@ terminate(_Reason, _Data) ->
 code_change(_OldVsn, Data, _Extra) ->
     {ok, Data}.
 
-handle_call(_Request, _NodeId, _BlockNo, _Signal, Data) ->
+handle_call(_Request, _Signal, Data) ->
     {stop, enosys, Data}.
 
 handle_info(#signal{gsn=?GSN_API_REGCONF}, <<>>, Data) ->

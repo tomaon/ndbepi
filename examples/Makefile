@@ -42,4 +42,4 @@ clean:
 
 #
 wireshark:
-	wireshark -X lua_script:ndbapi.lua
+	sudo wireshark -X lua_script:ndbapi.lua

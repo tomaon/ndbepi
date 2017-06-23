@@ -31,7 +31,7 @@
 %%efine(BACKUP,           16#00f4). % 243: online BACKUPs and checkpoints
 -define(DBTC,             16#00f5). % 245: Transaction Coordinator
 %%efine(DBDIH,            16#00f6). % 246: DIstribution Handler, local and global checkpoints
-%%efine(DBLQH,            16#00f7). % 247: Local Query Handler, coordinator of 2-phase commits
+-define(DBLQH,            16#00f7). % 247: Local Query Handler, coordinator of 2-phase commits
 %%efine(DBACC,            16#00f8). % 248: ACCess control and lock management
 %%efine(DBTUP,            16#00f9). % 249: TUPle manager, physical storage
 -define(DBDICT,           16#00fa). % 250: data DICTionary
@@ -66,46 +66,26 @@
 -define(GSN_GET_TABINFO_CONF,             190).
 -define(GSN_GET_TABINFOREF,                23).
 -define(GSN_GET_TABINFOREQ,                24).
--define(GSN_TCRELEASECONF,                 34).
-%%efine(GSN_TCRELEASEREF,                  35).
--define(GSN_TCRELEASEREQ,                  36).
--define(GSN_TCSEIZECONF,                   37).
--define(GSN_TCSEIZEREF,                    38).
--define(GSN_TCSEIZEREQ,                    39).
-
-%%efine(GSN_TCKEYCONF,                     10).
-%%efine(GSN_TCKEYREF,                      11).
-%%efine(GSN_TCKEYREQ,                      12).
-
-%%efine(GSN_TRANSID_AI,                     5).
-
-%%efine(GSN_TCROLLBACKCONF,                13).
-%%efine(GSN_TCROLLBACKREF,                 14).
-%%efine(GSN_TCROLLBACKREQ,                 15).
-
-%%efine(GSN_ATTRINFO,                       4).
-%%efine(GSN_KEYINFO,                        6).
-%%efine GSN_READCONF,                       7).
-%%efine(GSN_TCKEY_FAILCONF,                 8).
-%%efine(GSN_TCKEY_FAILREF,                  9).
-%%efine(GSN_TCROLLBACKREP,                 16).
+-define(GSN_LQHKEYCONF,                   314).
+-define(GSN_LQHKEYREF,                    315).
+-define(GSN_LQHKEYREQ,                    316).
+-define(GSN_TC_COMMIT_ACK,                469). % -> GSN_TCRELEASECONF ?!
 %%efine(GSN_TC_COMMITCONF,                 17).
 %%efine(GSN_TC_COMMITREF,                  18).
 %%efine(GSN_TC_COMMITREQ,                  19).
-%%efine(GSN_NODE_FAILREP,                  26).
-%%efine(GSN_NF_COMPLETEREP,                27).
-%%efine(GSN_ALLOC_NODEID_CONF,             61).
-%%efine(GSN_ALLOC_NODEID_REF,              62).
-%%efine(GSN_ALLOC_NODEID_REQ,              60).
-%%efine(GSN_CLOSE_COMREQ,                 127).
-%%efine(GSN_CONNECT_REP,                  163).
-%%efine(GSN_DISCONNECT_REP,               235).
-%%efine(GSN_TAKE_OVERTCCONF,              399).
-%%efine(GSN_ARBIT_STARTREQ,               477).
-%%efine(GSN_ARBIT_CHOOSEREQ,              480).
-%%efine(GSN_ARBIT_STOPORD,                483).
-%%efine(GSN_SUB_GCP_COMPLETE_REP,         593).
-%%efine(GSN_ALTER_TABLE_REP,              606).
+%%efine(GSN_TCKEYCONF,                     10).
+%%efine(GSN_TCKEYREF,                      11).
+%%efine(GSN_TCKEYREQ,                      12).
+-define(GSN_TCRELEASECONF,                 34).
+-define(GSN_TCRELEASEREF,                  35).
+-define(GSN_TCRELEASEREQ,                  36).
+%%efine(GSN_TCROLLBACKCONF,                13).
+%%efine(GSN_TCROLLBACKREF,                 14).
+%%efine(GSN_TCROLLBACKREQ,                 15).
+-define(GSN_TCSEIZECONF,                   37).
+-define(GSN_TCSEIZEREF,                    38).
+-define(GSN_TCSEIZEREQ,                    39).
+%%efine(GSN_TRANSID_AI,                     5).
 
 -define(MAX_GSN,                          782).
 

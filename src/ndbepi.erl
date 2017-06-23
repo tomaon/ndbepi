@@ -4,10 +4,9 @@
 
 %% -- public --
 -export([start/0, stop/0]).
--export([connect/0, connect/1, connect/2, disconnect/1]).
+-export([connect/0, disconnect/1]).
 
 %% -- internal --
--type(instance() :: integer()).
 -type(reason() :: baseline:reason()).
 
 %% == public ==
@@ -23,30 +22,11 @@ stop() ->
 
 -spec connect() -> {ok, pid()}|{error, _}.
 connect() ->
-    connect(0).
-
--spec connect(node_id()) -> {ok, pid()}|{error, _}.
-connect(NodeId) ->
-    connect(NodeId, 0).
-
--spec connect(node_id(), instance()) -> {ok, pid()}|{error, _}.
-connect(NodeId, Instance) ->
     case baseline_app:find(ndbepi_sup, ndbepi_connections, 100, 1) of
         undefined ->
             {error, not_found};
         SupRef ->
-            case start_child(SupRef, 10) of
-                {ok, Pid} ->
-                    case ndbepi_connection:connect(Pid, NodeId, Instance) of
-                        ok ->
-                            {ok, Pid};
-                        {error, Reason} ->
-                            ok = supervisor:terminate_child(SupRef, Pid),
-                            {error, Reason}
-                    end;
-                {error, Reason} ->
-                    {error, Reason}
-            end
+            start_child(SupRef, 10)
     end.
 
 -spec disconnect(pid()) -> ok|{error, _}.

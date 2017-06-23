@@ -4,36 +4,43 @@
 
 %% -- private --
 -export([start_link/2]).
--export([connect/3, disconnect/2]).
+-export([startTransaction/3, closeTransaction/2]).
 
 -behaviour(ndbepi_gen_block2).
--export([init/0, terminate/2, code_change/3,
-         handle_call/5, handle_info/3]).
+-export([init/1, terminate/2, code_change/3,
+         handle_call/3, handle_info/3]).
+
+%%
+%% transactionId = BlockNo + nodeId + counter
+%%
+
 
 %% -- internal --
 -record(data, {
-          id :: undefined|integer() % TODO
+          node_id  :: node_id(),
+          block_no :: block_no(),
+          index    :: non_neg_integer()
          }).
 
 %% == private ==
 
--spec start_link(node_id(), pos_integer()) -> {ok, pid()}|{error, _}.
+-spec start_link(node_id(), block_no()) -> {ok, pid()}|{error, _}.
 start_link(NodeId, BlockNo) ->
-    ndbepi_gen_block2:start_link(?MODULE, NodeId, BlockNo, []).
+    ndbepi_gen_block2:start_link(?MODULE, BlockNo, [NodeId, BlockNo], []).
 
 
--spec connect(pid(), node_id(), integer()) -> ok|{error, _}.
-connect(Pid, NodeId, Instance) ->
+-spec startTransaction(pid(), node_id(), integer()) -> ok|{error, _}.
+startTransaction(Pid, NodeId, Instance) ->
     ndbepi_gen_block2:call(Pid, {seize, [Instance], NodeId}).
 
--spec disconnect(pid(), node_id()) -> ok|{error, _}.
-disconnect(Pid, NodeId) ->
+-spec closeTransaction(pid(), node_id()) -> ok|{error, _}.
+closeTransaction(Pid, NodeId) ->
     ndbepi_gen_block2:call(Pid, {release, [], NodeId}).
 
 %% -- behaviour: ndbepi_gen_block2 --
 
-init() ->
-    {ok, #data{}}.
+init([NodeId, BlockNo]) ->
+    {ok, #data{node_id = NodeId, block_no = BlockNo, index = 0}}.
 
 terminate(_Reason, _Data) -> % TODO: id
     ok.
@@ -41,78 +48,73 @@ terminate(_Reason, _Data) -> % TODO: id
 code_change(_OldVsn, Data, _Extra) ->
     {ok, Data}.
 
-handle_call(Request, NodeId, BlockNo, Signal, Data) ->
-    {noreply, signal(Request, NodeId, BlockNo, Signal, Data), Data}.
+handle_call(Request, Signal, Data) ->
+    {noreply, signal(Request, Signal, Data), Data}.
 
 handle_info(#signal{gsn=?GSN_TCRELEASECONF}, <<>>, Data) ->
-    {reply, ok, Data#data{id = undefined}};
-handle_info(#signal{gsn=?GSN_TCSEIZECONF}=S, <<>>, Data) ->
     %%
-    %% signal_data_length != 3 ?, TODO
+    %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCRELEASECONF/1
+    %%
+    {reply, ok, Data#data{index = 0}};
+handle_info(#signal{gsn=?GSN_TCRELEASEREF}=S, <<>>, Data) ->
+    %%
+    %% ~/src/kernel/blocks/dbtc/Dbtc.hpp
+    %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZEREF/1
+    %%
+    Reason = case lists:nth(2, S#signal.signal_data) of
+                 229 -> <<"InvalidConnection">>
+             end,
+    {reply, {error, Reason}, Data};
+handle_info(#signal{gsn=?GSN_TCSEIZECONF}=S, <<>>, Data) ->
     %%
     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZECONF/1
     %%
-    {reply, ok, Data#data{id = lists:nth(2, S#signal.signal_data)}};
+    {reply, ok, Data#data{index = lists:nth(2, S#signal.signal_data)}};
 handle_info(#signal{gsn=?GSN_TCSEIZEREF}=S, <<>>, Data) ->
     %%
+    %% ~/src/kernel/blocks/dbtc/Dbtc.hpp
     %% ~/src/ndbapi/NdbTransaction.cpp: NdbTransaction::receiveTCSEIZEREF/1
     %%
-    {reply, {error, lists:nth(2, S#signal.signal_data)}, Data}; % ndberror.c, TODO
+    Reason = case lists:nth(2, S#signal.signal_data) of
+                 203 -> <<"SystemNotStartedError">>;
+                 219 -> <<"NoFreeApiConnection">>
+             end,
+    {reply, {error, Reason}, Data};
 handle_info(Signal, Binary, Data) ->
     ok = error_logger:warning_msg("[~p:~p] ~p,~p~n", [?MODULE, self(), Signal, Binary]),
     {noreply, Data}.
 
 %% == internal ==
 
-%% 00f50001
-
-%% Ndb.cpp : Ndb::startTransaction/4 (NdbRecord/char)
-%% - computeHash
-%% - startTransaction/2 (Table/PartitionId)
-
-%% Ndb.cpp : Ndb::startTransaction/4 (Table/Key_part_ptr)
-%% - computeHash
-%% - startTransaction/2 (Table/partitionId)
-
-%% Ndb.cpp : Ndb::startTransaction/4 (Table/partitionId)
-%% - table + partitionId => node_id
-%% - startTransactionLocal(0, node, 0) % PRIORITY! node instance?
-
-%% NDb.cpp : Ndb::startTransactionLocal/3
-%% - doConnect => NdbTransaction!
-%% - - NDB_connect : GSN_TCSEIZEREQ
-%% - - getConnectedNdbTransaction (pool) => NdbTransaction
-%% - tFirstTransId, aPriority > NdbTransaction
-
-signal({seize, [Instance]}, NodeId, BlockNo, Default, _Data) ->
+signal({seize, [Instance]}, Default, Data) ->
     %%
     %% ~/src/ndbapi/src/Ndb.cpp: Ndb::NDB_connect/2
     %%
     [
      Default#signal{gsn = ?GSN_TCSEIZEREQ,
-                    send_block_no = BlockNo,
+                    send_block_no = Data#data.block_no,
                     recv_block_no = ?DBTC,
                     signal_data_length = 3,
                     signal_data = [
-                                   0, % pool.index
-                                   ?NUMBER_TO_REF(BlockNo, NodeId),
+                                   0,
+                                   ?NUMBER_TO_REF(Data#data.block_no, Data#data.node_id),
                                    Instance
                                   ],
                     sections_length = 0},
      []
     ];
-signal({release, []}, NodeId, BlockNo, Default, Data) ->
+signal({release, []}, Default, Data) ->
     %%
     %% ~/src/ndbapi/Ndblist.cpp: Ndb::releaseConnectToNdb/1
     %%
     [
      Default#signal{gsn = ?GSN_TCRELEASEREQ,
-                    send_block_no = BlockNo,
+                    send_block_no = Data#data.block_no,
                     recv_block_no = ?DBTC,
                     signal_data_length = 3,
                     signal_data = [
-                                   Data#data.id,
-                                   ?NUMBER_TO_REF(BlockNo, NodeId),
+                                   Data#data.index,
+                                   ?NUMBER_TO_REF(Data#data.block_no, Data#data.node_id),
                                    0
                                   ],
                     sections_length = 0},

@@ -12,7 +12,7 @@
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_cast/2, handle_info/2]).
 
--callback init() ->
+-callback init(Args :: [term()]) ->
     {ok, Data :: term()}|
     {stop, Reason :: term()}.
 
@@ -23,8 +23,7 @@
     {ok, NewData :: term()}|
     {error, Reason :: term()}.
 
--callback handle_call(Request :: term(), NodeId :: node_id(), BlockNo :: block_no(),
-                      Signal :: signal(), Data :: term()) ->
+-callback handle_call(Request :: term(), Signal :: signal(), Data :: term()) ->
     {noreply, Args :: [term()], NewData :: term()}|
     {stop, Reason :: term(), NewData :: term()}.
 
@@ -36,7 +35,6 @@
 %% -- internal --
 -record(state, {
           module    :: module(),
-          node_id   :: node_id(),
           block_no  :: block_no(),
           fragments :: map(),
           ets       :: undefined|pid(),
@@ -49,9 +47,9 @@
 
 %% == private ==
 
--spec start_link(module(), node_id(), block_no(), [term()]) -> {ok, pid()}|{error, _}.
-start_link(Module, NodeId, BlockNo, Options) ->
-    gen_server:start_link(?MODULE, [Module, NodeId, BlockNo], Options).
+-spec start_link(module(), block_no(), [term()], [term()]) -> {ok, pid()}|{error, _}.
+start_link(Module, BlockNo, Args, Options) ->
+    gen_server:start_link(?MODULE, [Module, BlockNo, Args], Options).
 
 
 -spec call(pid(), request()) -> term().
@@ -123,25 +121,25 @@ setup(Args) ->
     loaded(Args).
 
 
-loaded([Module, NodeId, BlockNo]) ->
+loaded([Module, BlockNo, Args]) ->
     case baseline_app:find(ndbepi_sup, ndbepi_ets, 100, 1) of
         undefined ->
             {stop, not_found};
         Pid ->
-            found(#state{module = Module, node_id = NodeId, block_no = BlockNo,
-                         fragments = maps:new(), ets = Pid})
+            found(Args, #state{module = Module, block_no = BlockNo,
+                               fragments = maps:new(), ets = Pid})
     end.
 
-found(#state{block_no=B, ets=E}=X) ->
+found(Args, #state{block_no=B, ets=E}=X) ->
     case baseline_ets:insert_new(E, {B, self()}) of
         true ->
-            configured(X#state{tab = baseline_ets:tab(E)});
+            configured(Args, X#state{tab = baseline_ets:tab(E)});
         false ->
             {stop, ebusy} % -> retry
     end.
 
-configured(#state{module=M}=X) ->
-    case M:init() of
+configured(Args, #state{module=M}=X) ->
+    case M:init(Args) of
         {ok, Data} ->
             {ok, X#state{data = Data}};
         {stop, Reason} ->
@@ -149,10 +147,10 @@ configured(#state{module=M}=X) ->
     end.
 
 
-ready({A, L, K}, From, #state{module=M, node_id=N, block_no=B, tab=T, data=D}=X) ->
-    try select(T, K, B) of
+ready({A, L, N}, From, #state{module=M, block_no=B, tab=T, data=D}=X) ->
+    try select(T, B, N) of
         {_, P, S} ->
-            case M:handle_call({A, L}, N, B, S, D) of
+            case M:handle_call({A, L}, S, D) of
                 {noreply, Args, Data} ->
                     ok = apply(ndbepi_transporter, cast, [P|Args]),
                     {noreply, X#state{data = Data, from = From}};
@@ -165,10 +163,10 @@ ready({A, L, K}, From, #state{module=M, node_id=N, block_no=B, tab=T, data=D}=X)
     end.
 
 
-received(Signal, Binary, #state{module=M, data=D}=X) ->
+received(Signal, Binary, #state{module=M, data=D, from=F}=X) ->
     case M:handle_info(Signal, Binary, D) of
-        {reply, Reply, Data} ->
-            _ = gen_server:reply(X#state.from, Reply),
+        {reply, Reply, Data} when F =/= undefined ->
+            _ = gen_server:reply(F, Reply),
             {noreply, X#state{data = Data, from = undefined}};
         {noreply, Data} ->
             {noreply, X#state{data = Data, from = undefined}};
@@ -180,17 +178,17 @@ received(Signal, Binary, #state{module=M, data=D}=X) ->
 key(#signal{signal_data_length=L, signal_data=D}) ->
     lists:nth(L, D).
 
-select(Tab, 0, BlockNo) ->
+select(Tab, Key, 0) ->
     case ets:select(Tab, [{{'$1', '_', '_'}, [], ['$_']}]) of
         [] ->
             error(badarg);
         List ->
-            lists:nth(1 + BlockNo rem length(List), List)
+            lists:nth(1 + Key rem length(List), List)
     end;
-select(Tab, NodeId, BlockNo) ->
-    case ets:select(Tab, [{{'$1', '_', '_'}, [{'=', '$1', NodeId}], ['$_']}]) of
+select(Tab, Key, Param) ->
+    case ets:select(Tab, [{{Param, '_', '_'}, [], ['$_']}]) of
         [] ->
-            select(Tab, undefined, BlockNo);
+            select(Tab, Key, 0);
         List ->
             hd(List)
     end.

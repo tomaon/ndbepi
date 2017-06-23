@@ -10,19 +10,21 @@
 -export([call/0]).
 
 -behaviour(ndbepi_gen_block1).
--export([init/0, terminate/2, code_change/3,
-         handle_call/5, handle_info/3]).
+-export([init/1, terminate/2, code_change/3,
+         handle_call/3, handle_info/3]).
 
 %% -- internal --
 -record(data, {
+          node_id  :: node_id(),
+          block_no :: block_no(),
           request_id :: non_neg_integer()
          }).
 
 %% == private ==
 
--spec start_link(node_id(), pos_integer()) -> {ok, pid()}|{error, _}.
+-spec start_link(node_id(), block_no()) -> {ok, pid()}|{error, _}.
 start_link(NodeId, BlockNo) ->
-    ndbepi_gen_block1:start_link(?MODULE, NodeId, BlockNo, []).
+    ndbepi_gen_block1:start_link(?MODULE, BlockNo, [NodeId, BlockNo], []).
 
 
 call() ->
@@ -35,8 +37,8 @@ call() ->
 
 %% -- behaviour: ndbepi_gen_block1 --
 
-init() ->
-    {ok, #data{request_id = 0}}.
+init([NodeId, BlockNo]) ->
+    {ok, #data{node_id = NodeId, block_no = BlockNo}}.
 
 terminate(_Reason, _Data) ->
     ok.
@@ -44,9 +46,9 @@ terminate(_Reason, _Data) ->
 code_change(_OldVsn, Data, _Extra) ->
     {ok, Data}.
 
-handle_call(Request, NodeId, BlockNo, Signal, Data) ->
+handle_call(Request, Signal, Data) ->
     R = Data#data.request_id + 1, % TODO
-    {noreply, signal(Request, NodeId, BlockNo, R, Signal), Data#data{request_id = R}}.
+    {noreply, signal(Request, Signal, R, Data), Data#data{request_id = R}}.
 
 handle_info(#signal{gsn=?GSN_GET_TABINFO_CONF}=S, Binary, Data) ->
     %%
@@ -83,18 +85,18 @@ handle_info(Signal, Binary, Data) ->
 
 %% == internal ==
 
-signal({get_table_by_id, [Id]}, NodeId, BlockNo, RequestId, Default) ->
+signal({get_table_by_id, [Id]}, Default, RequestId, Data) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoReq
     %%
     [
      Default#signal{gsn = ?GSN_GET_TABINFOREQ,
-                    send_block_no = BlockNo,
+                    send_block_no = Data#data.block_no,
                     recv_block_no = ?DBDICT,
                     signal_data_length = 5,
                     signal_data = [
                                    RequestId,
-                                   ?NUMBER_TO_REF(BlockNo, NodeId),
+                                   ?NUMBER_TO_REF(Data#data.block_no, Data#data.node_id),
                                    2, % 0(=RequestById) + 2(=LongSignalConf)
                                    Id,
                                    0  % TODO
@@ -102,18 +104,18 @@ signal({get_table_by_id, [Id]}, NodeId, BlockNo, RequestId, Default) ->
                     sections_length = 0},
      []
     ];
-signal({get_table_by_name, [Name]}, NodeId, BlockNo, RequestId, Default) ->
+signal({get_table_by_name, [Name]}, Default, RequestId, Data) ->
     %%
     %% ~/include/kernel/signaldata/GetTabInfo.hpp: GetTabInfoReq
     %%
     [
      Default#signal{gsn = ?GSN_GET_TABINFOREQ,
-                    send_block_no = BlockNo,
+                    send_block_no = Data#data.block_no,
                     recv_block_no = ?DBDICT,
                     signal_data_length = 5,
                     signal_data = [
                                    RequestId,
-                                   ?NUMBER_TO_REF(BlockNo, NodeId),
+                                   ?NUMBER_TO_REF(Data#data.block_no, Data#data.node_id),
                                    3, % 1(=RequestByName) + 2(=LongSignalConf)
                                    size(Name) + 1, % NULL terminated
                                    0
