@@ -65,6 +65,7 @@ get_childspecs(Env, NodeId, Config) ->
          [
           ndbepi_ets,
           [
+           named_table, % TODO
            {read_concurrency, true}
           ]
          ]
@@ -105,7 +106,7 @@ get_childspecs(Env, NodeId, Config) ->
        transient,
        5000,
        worker,
-       [ndbepi_gen_block1]
+       [ndbepi_gen_block]
      },
      {
        ndbepi_dictionary,
@@ -120,7 +121,7 @@ get_childspecs(Env, NodeId, Config) ->
        transient,
        5000,
        worker,
-       [ndbepi_gen_block1]
+       [ndbepi_gen_block]
      },
      {
        ndbepi_connections,
@@ -144,7 +145,7 @@ get_childspecs(Env, NodeId, Config) ->
                temporary,
                5000,
                worker,
-               [ndbepi_gen_block2]
+               [ndbepi_gen_block]
              }
             ]
           }

@@ -4,9 +4,9 @@
 
 %% -- private --
 -export([start_link/2]).
--export([startTransaction/3, closeTransaction/2]).
+-export([start_transaction/3, close_transaction/2]).
 
--behaviour(ndbepi_gen_block2).
+-behaviour(ndbepi_gen_block).
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_info/3]).
 
@@ -26,18 +26,18 @@
 
 -spec start_link(node_id(), block_no()) -> {ok, pid()}|{error, _}.
 start_link(NodeId, BlockNo) ->
-    ndbepi_gen_block2:start_link(?MODULE, BlockNo, [NodeId, BlockNo], []).
+    ndbepi_gen_block:start_link(?MODULE, BlockNo, [NodeId, BlockNo], []).
 
 
--spec startTransaction(pid(), node_id(), integer()) -> ok|{error, _}.
-startTransaction(Pid, NodeId, Instance) ->
-    ndbepi_gen_block2:call(Pid, {seize, [Instance], NodeId}).
+-spec start_transaction(pid(), node_id(), integer()) -> ok|{error, _}.
+start_transaction(Pid, NodeId, Instance) ->
+    ndbepi_gen_block:call(Pid, {seize, [Instance], NodeId}).
 
--spec closeTransaction(pid(), node_id()) -> ok|{error, _}.
-closeTransaction(Pid, NodeId) ->
-    ndbepi_gen_block2:call(Pid, {release, [], NodeId}).
+-spec close_transaction(pid(), node_id()) -> ok|{error, _}.
+close_transaction(Pid, NodeId) ->
+    ndbepi_gen_block:call(Pid, {release, [], NodeId}).
 
-%% -- behaviour: ndbepi_gen_block2 --
+%% -- behaviour: ndbepi_gen_block --
 
 init([NodeId, BlockNo]) ->
     {ok, #data{node_id = NodeId, block_no = BlockNo, index = 0}}.
@@ -49,6 +49,8 @@ code_change(_OldVsn, Data, _Extra) ->
     {ok, Data}.
 
 handle_call(Request, Signal, Data) ->
+    %% {seize, _, _} & index!=0  -> ???, TODO   -> spawn(ndbepi_transaction) ?
+    %% {release, _, _} & index=0 -> ignore?, TODO
     {noreply, signal(Request, Signal, Data), Data}.
 
 handle_info(#signal{gsn=?GSN_TCRELEASECONF}, <<>>, Data) ->

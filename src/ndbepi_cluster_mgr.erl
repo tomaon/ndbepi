@@ -5,7 +5,7 @@
 %% -- private --
 -export([start_link/2]).
 
--behaviour(ndbepi_gen_block1).
+-behaviour(ndbepi_gen_block).
 -export([init/1, terminate/2, code_change/3,
          handle_call/3, handle_info/3]).
 
@@ -19,9 +19,9 @@
 
 -spec start_link(node_id(), block_no()) -> {ok, pid()}|{error, _}.
 start_link(NodeId, BlockNo) ->
-    ndbepi_gen_block1:start_link(?MODULE, BlockNo, [NodeId, BlockNo], []).
+    ndbepi_gen_block:start_link(?MODULE, BlockNo, [NodeId, BlockNo], []).
 
-%% -- behaviour: ndbepi_gen_block1 --
+%% -- behaviour: ndbepi_gen_block --
 
 init([NodeId, BlockNo]) ->
     {ok, #data{node_id = NodeId, block_no = BlockNo}}.

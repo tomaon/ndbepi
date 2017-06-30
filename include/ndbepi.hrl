@@ -34,7 +34,7 @@
 %%                                    14-17
 %%efine(TABLE_TYPE,                    18).
 %%efine(PRIMARY_TABLE,                 19). % m_primaryTable
-                                                %efine(PRIMARY_TABLE_ID,              20).
+%%efine(PRIMARY_TABLE_ID,              20).
 %%efine(INDEX_STATE,                   21).
 %%efine(INSERT_TRIGGER_ID,             22).
 %%efine(UPDATE_TRIGGER_ID,             23).
@@ -79,9 +79,9 @@
 %%                                  162-998
 %%efine(TABLE_END,                    999).
 %%                                          % NdbColumnImpl
-%%efine(ATTRIBUTE_NAME,              1000). % m_name
+-define(ATTRIBUTE_NAME,              1000). % m_name
 -define(ATTRIBUTE_ID,                1001). % m_attrId
--define(ATTRIBUTE_TYPE,              1002).
+%%efine(ATTRIBUTE_TYPE,              1002).
 -define(ATTRIBUTE_SIZE,              1003). % m_orgAttrSize, m_attrSize (0|3|4|5|6|7)
 %%                                   1004
 -define(ATTRIBUTE_ARRAY_SIZE,        1005). % m_arraySize
@@ -101,7 +101,7 @@
 -define(ATTRIBUTE_DEFAULT_VALUE_LEN, 1020). % m_defaultValue (1/2)
 -define(ATTRIBUTE_DEFAULT_VALUE,     1021). % m_defaultValue (2/2)
 %%                                1022-1998
-%%efine(ATTRIBUTE_END,               1999).
+-define(ATTRIBUTE_END,               1999).
 
 %% -- ~/include/ndb_constants.h --
 -define(NDB_TYPE_UNDEFINED,           0). % Undefined
