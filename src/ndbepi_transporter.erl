@@ -30,7 +30,8 @@
 -define(TCP_TRANSPORTER, $1).
 
 %% -- ~/include/transporter/TransporterFacade.cpp --
--define(CHUNK_SZ, ((?MAX_SEND_MESSAGE_BYTESIZE bsl 2) div ?NDB_SECTION_SEGMENT_SZ - 2 ) * ?NDB_SECTION_SEGMENT_SZ).
+-define(CHUNK_SZ, ((?MAX_SEND_MESSAGE_BYTESIZE bsl 2)
+                       div ?NDB_SECTION_SEGMENT_SZ - 2 ) * ?NDB_SECTION_SEGMENT_SZ).
 
 %% -- ~/src/common/transporter/TransporterInternalDefinitions.hpp --
 
@@ -291,7 +292,7 @@ received(Binary, State) ->
 
 received(Binary, Size, State)
   when Size >= 3 ->
-    received(Binary, Size, unpack(Binary), State);
+    received(Binary, Size, unpack(Binary, State), State);
 received(Binary, _Size, State) ->
     {noreply, State#state{rest = Binary}}.
 
@@ -375,6 +376,7 @@ sections_to_words([H|T], Endianness, List1, List2) ->
 word(Tuple, List) ->
     lists:foldl(fun({N, S, M}, A) -> A bor ((element(N, Tuple) bsl S) band M) end, 0, List).
 
+
 pack(#signal{checksum_included=C, signal_id_included=I, signal_data_length=D,
              sections_length=L}=S, Length, Data, Endianness) ->
 
@@ -437,7 +439,7 @@ pack(#signal{checksum_included=C, signal_id_included=I, signal_data_length=D,
     %% checksum
     words_to_bin(case C of 0 -> W; 1 -> W ++ [checksum(W)] end, Endianness).
 
-unpack(Binary) ->
+unpack(Binary, #state{local=L, remote=R}) ->
 
     B = ?GET(bin_to_word(Binary, 0, 1, native),
              ?WORD1_SHIFT_BYTE_ORDER_1, ?WORD1_MASK_BYTE_ORDER_1), % 1 or 3
@@ -451,8 +453,12 @@ unpack(Binary) ->
     #signal {
        gsn =
            ?GET(W2, ?WORD2_SHIFT_GSN, ?WORD2_MASK_GSN),
+       send_node_id =
+           R,
        send_block_no =
            ?GET(W3, ?WORD3_SHIFT_SEND_BLOCK_NO, ?WORD3_MASK_SEND_BLOCK_NO),
+       recv_node_id =
+           L,
        recv_block_no =
            ?GET(W3, ?WORD3_SHIFT_RECV_BLOCK_NO, ?WORD3_MASK_RECV_BLOCK_NO),
        byte_order =

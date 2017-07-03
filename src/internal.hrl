@@ -114,8 +114,10 @@
 -record(signal,
         {
           gsn                    :: undefined|1 .. ?MAX_GSN,
-          send_block_no          :: undefined|non_neg_integer(),
-          recv_block_no          :: undefined|non_neg_integer(),
+          send_node_id           :: undefined|node_id(),
+          send_block_no          :: undefined|block_no(),
+          recv_node_id           :: undefined|node_id(),
+          recv_block_no          :: undefined|block_no(),
           byte_order             :: 0|1,                         % < mgmepi
           checksum_included      :: 0|1,                         % < mgmepi
           signal_id_included     :: 0|1,                         % < mgmepi
